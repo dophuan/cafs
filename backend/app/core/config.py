@@ -78,6 +78,22 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: EmailStr | None = None
 
+    # Zalo OA Settings
+    ZALO_APP_ID: str
+    ZALO_APP_SECRET: str
+    ZALO_ACCESS_TOKEN: str = ""
+    ZALO_WEBHOOK_SECRET: str
+    ZALO_CALLBACK_URL: str = "http://localhost:8000/api/v1/auth/zalo/callback"
+    ZALO_HOME_URL: str = "http://localhost:8000"
+
+    @model_validator(mode="after")
+    def update_zalo_urls(self) -> Self:
+        if self.ENVIRONMENT != "local":
+            base_url = "https://your-production-domain.com"
+            self.ZALO_CALLBACK_URL = f"{base_url}/api/v1/auth/zalo/callback"
+            self.ZALO_HOME_URL = base_url
+        return self
+
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:
         if not self.EMAILS_FROM_NAME:
