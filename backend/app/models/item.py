@@ -1,5 +1,5 @@
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -13,14 +13,14 @@ class ItemBase(SQLModel):
 class ItemCreate(ItemBase):
     pass
 
-class ItemUpdate(SQLModel):  # Changed to inherit from SQLModel instead of ItemBase
+class ItemUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
 
 class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
-    owner: "User" | None = Relationship(back_populates="items")
+    owner: Optional["User"] = Relationship(back_populates="items")
 
 class ItemPublic(ItemBase):
     id: uuid.UUID
