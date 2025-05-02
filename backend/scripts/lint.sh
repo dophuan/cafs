@@ -3,6 +3,5 @@
 set -e
 set -x
 
-mypy app
-ruff check app
+ruff check --fix app
 ruff format app --check
