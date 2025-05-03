@@ -29,7 +29,7 @@ jobs:
         run: echo "$GITHUB_CONTEXT"
       - uses: tiangolo/issue-manager@0.5.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN }}
           config: >
             {
               "answered": {
