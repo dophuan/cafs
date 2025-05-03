@@ -8,7 +8,9 @@ from app.core.config import settings
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
-    return f"{route.tags[0]}-{route.name}"
+    """Generate a unique ID for the route that includes its tag if available."""
+    tag = route.tags[0] if route.tags else "untagged"
+    return f"{tag}-{route.name}"
 
 
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
