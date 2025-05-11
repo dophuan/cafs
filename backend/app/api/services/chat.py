@@ -1,9 +1,8 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Union, List, Dict
 
-import openai
 import requests
 from fastapi import HTTPException, status
 from pydantic import BaseModel, validator
@@ -20,16 +19,6 @@ from sqlmodel import select as sqlmodel_select
 
 from app.models.message import LLMConversation
 
-
-class ChatRequest(BaseModel):
-    user_message: str
-
-
-class ChatResponse(BaseModel):
-    bot_response: str
-    conversation_id: str | None = None
-
-
 class MessageContent(BaseModel):
     role: str
     content: str
@@ -40,6 +29,12 @@ class MessageContent(BaseModel):
             raise ValueError('Role must be either "user" or "assistant"')
         return v
 
+class ChatRequest(BaseModel):
+    user_message: Union[str, List[MessageContent]]
+
+class ChatResponse(BaseModel):
+    bot_response: str
+    conversation_id: str | None = None
 
 class ConversationRequest(BaseModel):
     conversation_id: str | None = None
@@ -62,76 +57,53 @@ class LLMService:
         self.engine = engine
         self.local_endpoint = local_endpoint
 
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: Union[str, List[MessageContent]]) -> str:
         if self.local_endpoint:
-            errors: list[str] = []
             try:
+                print(f"Attempting to connect to LLM at: {self.local_endpoint}")
+                
+                messages = []
+                if isinstance(prompt, str):
+                    messages = [{"role": "user", "content": prompt}]
+                else:
+                    messages = [{"role": msg.role, "content": msg.content} for msg in prompt]
+
+                headers = {
+                    "Content-Type": "application/json"
+                }
+                
+                payload = {
+                    "model": "mistral-7b-instruct-v0.2",
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 2000,
+                    "stream": False
+                }
+
+                print("Sending payload:", payload)
+                
                 response = requests.post(
-                    f"{self.local_endpoint}/v1/completions",
-                    json={"prompt": prompt, "max_tokens": 150, "temperature": 0.7},
+                    f"{self.local_endpoint}/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
                 )
+                
+                print(f"Response status: {response.status_code}")
+                print(f"Response body: {response.text}")
+                
                 response.raise_for_status()
                 json_response = response.json()
+                
                 if "choices" in json_response and len(json_response["choices"]) > 0:
-                    return str(json_response["choices"][0]["text"]).strip()
+                    return str(json_response["choices"][0]["message"]["content"]).strip()
                 return ""
+                    
             except requests.RequestException as e:
-                errors.append(f"Completions endpoint failed: {str(e)}")
-
-            try:
-                response = requests.post(
-                    self.local_endpoint,
-                    json={"prompt": prompt, "max_tokens": 150, "temperature": 0.7},
-                )
-                response.raise_for_status()
-                result = response.json()
-
-                if "response" in result:
-                    return str(result["response"]).strip()
-                elif "output" in result:
-                    return str(result["output"]).strip()
-                elif "generated_text" in result:
-                    return str(result["generated_text"]).strip()
-                elif "choices" in result and len(result["choices"]) > 0:
-                    choice = result["choices"][0]
-                    if isinstance(choice, dict) and "text" in choice:
-                        return str(choice["text"]).strip()
-                elif isinstance(result, str):
-                    return result.strip()
-
-                return f"Received response but couldn't parse it: {json.dumps(result)}"
-            except requests.RequestException as e:
-                errors.append(f"Root endpoint failed: {str(e)}")
-
-            error_msg = "; ".join(errors)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"All local LLM attempts failed: {error_msg}",
-            )
-        else:
-            if not self.api_key:
+                print(f"Error connecting to LLM: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="API key is required",
-                )
-
-            openai.api_key = self.api_key
-            try:
-                engine_name = self.engine if self.engine else "text-davinci-003"
-
-                completion = openai.completions.create(
-                    model=engine_name, prompt=prompt, max_tokens=150, temperature=0.7
-                )
-
-                if hasattr(completion, "choices") and len(completion.choices) > 0:
-                    if hasattr(completion.choices[0], "text"):
-                        return str(completion.choices[0].text).strip()
-
-                return ""
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"LLM interaction failed: {str(e)}",
+                    detail=f"Chat API request failed: {str(e)}"
                 )
 
     def list_conversations(
@@ -149,14 +121,12 @@ class LLMService:
             page = page or 1
             page_size = page_size or 10
 
-            # Get the actual column names directly from the model to ensure alignment
             user_id_param = (
                 uuid.UUID(self.user_id)
                 if isinstance(self.user_id, str)
                 else self.user_id
             )
 
-            # Use explicit column references from LLMConversation model
             count_query = sqlmodel_select(func.count()).select_from(LLMConversation).where(
                 LLMConversation.user_id == user_id_param
             )
@@ -174,7 +144,6 @@ class LLMService:
             offset = (page - 1) * page_size
             is_last_page = (offset + page_size) >= total_count
 
-            # Use the SQLModel query pattern instead of raw SQL
             statement = (
                 sqlmodel_select(
                     LLMConversation.id,
@@ -183,7 +152,7 @@ class LLMService:
                     LLMConversation.updated_at,
                 )
                 .where(LLMConversation.user_id == user_id_param)
-                .order_by(LLMConversation.updated_at.desc())  # Fixed datetime.desc() error
+                .order_by(LLMConversation.updated_at.desc())
                 .limit(page_size)
                 .offset(offset)
             )
@@ -267,7 +236,7 @@ class LLMService:
                 detail=f"Failed to delete conversation: {str(e)}",
             )
 
-    def get_chat_history(self, conversation_id: str) -> list[dict[str, str]]:
+    def get_chat_history(self, conversation_id: str) -> List[Dict[str, str]]:
         if not self.db or not self.user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -286,7 +255,6 @@ class LLMService:
                 else conversation_id
             )
 
-            # Use SQLModel's query approach
             from sqlmodel import and_
 
             query_result = (
@@ -306,23 +274,7 @@ class LLMService:
                     detail=f"Conversation with ID {conversation_id} not found or doesn't belong to you",
                 )
 
-            messages = query_result.messages or []
-
-            chat_history = []
-            for i in range(0, len(messages), 2):
-                if i + 1 < len(messages):
-                    chat_history.append(
-                        {
-                            "user": messages[i].get("content", ""),
-                            "bot": messages[i + 1].get("content", ""),
-                        }
-                    )
-                else:
-                    chat_history.append(
-                        {"user": messages[i].get("content", ""), "bot": ""}
-                    )
-
-            return chat_history
+            return query_result.messages or []
 
         except HTTPException:
             raise
@@ -371,7 +323,6 @@ class LLMService:
                     else self.user_id
                 )
 
-                # Use SQLModel's query approach
                 from sqlmodel import and_
 
                 existing_conversation = (

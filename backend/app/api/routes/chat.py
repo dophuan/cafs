@@ -1,13 +1,10 @@
-from typing import Any
-
+from typing import Any, List
 from fastapi import APIRouter, HTTPException, Query, status
-
 from app.api.deps import CurrentUser, SessionDep
 from app.api.services.chat import ChatRequest, ChatResponse
 from app.utils import get_llm_service
 
 router = APIRouter()
-
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
@@ -23,11 +20,17 @@ async def chat_endpoint(
         # Get the bot's response
         bot_response = llm_service.query(request.user_message)
 
+        # Prepare user_message for conversation storage
+        user_message = (
+            request.user_message if isinstance(request.user_message, str)
+            else request.user_message[-1].user  # Get the last user message from the conversation
+        )
+
         # Save the conversation
         conversation_result = llm_service.create_or_update_conversation(
             conversation_id=conversation_id,
             conversation_name=conversation_name,
-            user_message=request.user_message,
+            user_message=user_message,
             bot_response=bot_response,
         )
 
