@@ -9,6 +9,8 @@ import jwt
 from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 
+from app.api.deps import CurrentUser, SessionDep
+from app.api.services.chat import LLMService
 from app.core import security
 from app.core.config import settings
 
@@ -121,3 +123,16 @@ def verify_password_reset_token(token: str) -> str | None:
         return str(decoded_token["sub"])
     except InvalidTokenError:
         return None
+
+async def get_llm_service(session: SessionDep, current_user: CurrentUser):
+    api_key = settings.OPENAI_API_KEY
+    local_endpoint = settings.LOCAL_LLM_ENDPOINT
+    engine = settings.OPENAI_ENGINE
+
+    return LLMService(
+        db=session,
+        user_id=str(current_user.id),
+        api_key=str(api_key) if api_key else "",
+        engine=str(engine) if engine else "",
+        local_endpoint=local_endpoint
+    )
