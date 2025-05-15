@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from urllib.parse import quote_plus
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,15 +24,17 @@ from app.core.config import settings # noqa
 
 target_metadata = SQLModel.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
 
 def get_url():
+    if os.getenv("ENVIRONMENT") == "production":
+        DB_USER = os.getenv("POSTGRES_USER")
+        DB_PASS = quote_plus(os.getenv("POSTGRES_PASSWORD")) 
+        DB_NAME = os.getenv("POSTGRES_DB")
+        DB_HOST = os.getenv("POSTGRES_SERVER")
+        
+        return f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
+    
     return str(settings.SQLALCHEMY_DATABASE_URI)
-
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
