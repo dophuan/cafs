@@ -23,6 +23,10 @@ RUN uv pip install --system .
 # Copy the rest of the application
 COPY ./backend /app
 
+# Copy the Zalo verification file to a static directory
+RUN mkdir -p /app/static
+COPY zalo_verifierE8_WTUc2QoyViSuAciPh2tEnv1MVnp98DZ8t.html /app/static/
+
 # Set environment variables
 ENV PORT=8080
 ENV HOST=0.0.0.0
