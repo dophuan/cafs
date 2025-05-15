@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        return 'postgresql+psycopg://postgres:100596atXx@/postgres?unix_socket=/cloudsql/cafs-459803:asia-east1:webhook-db:5432'
+        return 'postgresql+psycopg://postgres:100596atXx@/postgres?host=/cloudsql/cafs-459803:asia-east1:webhook-db:5432'
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
