@@ -1,5 +1,6 @@
 import sentry_sdk
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
@@ -21,6 +22,10 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+@app.get("/zalo_verifierE8_WTUc2QoyViSuAciPh2tEnv1MVnp98DZ8t.html")
+async def serve_zalo_verifier():
+    return FileResponse("/app/static/zalo_verifierE8_WTUc2QoyViSuAciPh2tEnv1MVnp98DZ8t.html")
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:
