@@ -61,14 +61,6 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
         return 'postgresql+psycopg://postgres:100596atXx@/app?host=/cloudsql/cafs-459803:asia-east1:webhook-db:5432'
-        # return MultiHostUrl.build(
-        #     scheme="postgresql+psycopg",
-        #     username=self.POSTGRES_USER,
-        #     password=self.POSTGRES_PASSWORD,
-        #     host=self.POSTGRES_SERVER,
-        #     port=self.POSTGRES_PORT,
-        #     path=self.POSTGRES_DB,
-        # )
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
