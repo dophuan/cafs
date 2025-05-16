@@ -11,11 +11,11 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 async def create_webhook(
     *,
     request: Request,
-    webhook_service: WebhookService = Depends(deps.get_webhook_service),  # Updated import
+    webhook_service: WebhookService = Depends(deps.get_webhook_service),
     x_webhook_signature: str = Header(None)
 ) -> Any:
     """
-    Receive webhook events
+    Receive webhook events - public endpoint
     """
     payload = await request.body()
     
@@ -32,25 +32,31 @@ async def create_webhook(
     
     return webhook_service.create_webhook(webhook_data)
 
-@router.get("/", response_model=List[WebhookRead])
+@router.get(
+    "/", 
+    response_model=List[WebhookRead],
+    dependencies=[Depends(deps.get_current_active_superuser)]
+)
 def read_webhooks(
     skip: int = 0,
     limit: int = 100,
-    webhook_service: WebhookService = Depends(deps.get_webhook_service),  # Updated import
-    current_user = Depends(deps.get_current_active_superuser),
+    webhook_service: WebhookService = Depends(deps.get_webhook_service),
 ) -> Any:
     """
     Retrieve webhooks with pagination
     """
     return webhook_service.get_webhooks(skip=skip, limit=limit)
 
-@router.get("/event/{event_type}", response_model=List[WebhookRead])
+@router.get(
+    "/event/{event_type}", 
+    response_model=List[WebhookRead],
+    dependencies=[Depends(deps.get_current_active_superuser)]
+)
 def read_webhooks_by_event(
     event_type: str,
     skip: int = 0,
     limit: int = 100,
-    webhook_service: WebhookService = Depends(deps.get_webhook_service),  # Updated import
-    current_user = Depends(deps.get_current_active_superuser),
+    webhook_service: WebhookService = Depends(deps.get_webhook_service),
 ) -> Any:
     """
     Retrieve webhooks filtered by event type
@@ -61,11 +67,14 @@ def read_webhooks_by_event(
         limit=limit
     )
 
-@router.get("/{webhook_id}", response_model=WebhookRead)
+@router.get(
+    "/{webhook_id}", 
+    response_model=WebhookRead,
+    dependencies=[Depends(deps.get_current_active_superuser)]
+)
 def read_webhook(
     webhook_id: int,
-    webhook_service: WebhookService = Depends(deps.get_webhook_service),  # Updated import
-    current_user = Depends(deps.get_current_active_superuser),
+    webhook_service: WebhookService = Depends(deps.get_webhook_service),
 ) -> Any:
     """
     Retrieve specific webhook by ID

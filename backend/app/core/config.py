@@ -60,7 +60,17 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        return 'postgresql+psycopg2://postgres:100596atXx@/postgres?host=/cloudsql/cafs-459803:asia-east1:webhook-db'
+        if self.ENVIRONMENT == "local":
+            return MultiHostUrl.build(
+                scheme="postgresql+psycopg",
+                username=self.POSTGRES_USER,
+                password=self.POSTGRES_PASSWORD,
+                host=self.POSTGRES_SERVER,
+                port=self.POSTGRES_PORT,
+                path=self.POSTGRES_DB,
+            )
+        if self.ENVIRONMENT == "production":
+            return f'postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@/{self.POSTGRES_DB}?host=/cloudsql/{self.POSTGRES_SERVER}'
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
