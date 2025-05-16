@@ -16,28 +16,28 @@ class WebhookService:
         if not settings.WEBHOOK_SECRET_KEY:
             return True
         
-        # Debug prints
-        print("Server Secret Key:", settings.WEBHOOK_SECRET_KEY)
-        print("Received Signature:", signature)
-        print("Received Payload:", payload.decode('utf-8'))
-        
         expected_signature = hmac.new(
             settings.WEBHOOK_SECRET_KEY.encode(),
             payload,
             hashlib.sha256
         ).hexdigest()
         
-        print("Expected Signature:", expected_signature)
-        
         return expected_signature == signature
 
     def create_webhook(self, webhook_data: WebhookCreate) -> Webhook:
         """Create a new webhook entry"""
-        db_webhook = Webhook.from_orm(webhook_data)
-        self.db.add(db_webhook)
-        self.db.commit()
-        self.db.refresh(db_webhook)
-        return db_webhook
+        try:
+            db_webhook = Webhook.from_orm(webhook_data)
+            self.db.add(db_webhook)
+            self.db.commit()
+            self.db.refresh(db_webhook)
+            return db_webhook  # FastAPI will automatically return 200 OK
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error: {str(e)}"
+            )
 
     def get_webhooks(self, skip: int = 0, limit: int = 100) -> List[Webhook]:
         """Get list of webhooks with pagination"""
