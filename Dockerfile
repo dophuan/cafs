@@ -1,16 +1,14 @@
-FROM python:3.11-slim
+FROM python:3.11-slim as backend
 
-# Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get update && apt-get install -y \
+WORKDIR /app
+
+# Install system dependencies including PostgreSQL client
+RUN apt-get update && apt-get install -y \
     curl \
     postgresql-client \
     libpq-dev \
     gcc \
-    nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
 
 # Install uv
 RUN pip install uv
@@ -19,38 +17,56 @@ RUN pip install uv
 COPY ./backend/pyproject.toml /app/
 COPY ./backend/poetry.lock /app/
 
-# Install all backend dependencies using uv pip
+# Install all dependencies using uv pip
 RUN uv pip install --system .
 
 # Copy the backend application
 COPY ./backend /app
 
-# Setup frontend
-WORKDIR /app/frontend
-
-# Copy frontend dependency files
-COPY ./frontend/package*.json ./
-COPY ./frontend/tsconfig*.json ./
-COPY ./frontend/vite.config.ts ./
-COPY ./frontend/.env* ./
-
-# Install frontend dependencies
-RUN npm ci
-
-# Copy frontend source code
-COPY ./frontend/src ./src
-COPY ./frontend/public ./public
-COPY ./frontend/index.html ./
-
-# Build frontend
-RUN npm run build
-
-# Move back to main app directory
-WORKDIR /app
-
 # Copy the Zalo verification file to a static directory
 RUN mkdir -p /app/static
 COPY zalo_verifierE8_WTUc2QoyViSuAciPh2tEnv1MVnp98DZ8t.html /app/static/
+
+# Frontend build stage
+FROM node:20 AS frontend-build
+
+WORKDIR /app
+
+COPY ./frontend/package*.json ./
+
+RUN npm install
+
+COPY ./frontend/ ./
+
+# Create env file with API URL pointing to the same host
+RUN echo "VITE_API_URL=http://localhost:8080" > .env
+
+RUN npm run build
+
+# Final stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install Nginx
+RUN apt-get update && apt-get install -y \
+    nginx \
+    curl \
+    postgresql-client \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend from backend stage
+COPY --from=backend /app /app
+COPY --from=backend /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+
+# Copy frontend build from frontend stage
+COPY --from=frontend-build /app/dist /usr/share/nginx/html
+
+# Copy Nginx configuration
+COPY ./frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY ./frontend/nginx-backend-not-found.conf /etc/nginx/extra-conf.d/backend-not-found.conf
 
 # Set environment variables
 ENV PORT=8080
@@ -74,5 +90,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/utils/health-check/ || exit 1
 
-# Start with 1 worker, enable proxy headers, and increase timeout
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--proxy-headers", "--timeout-keep-alive", "75"]
+# Create startup script
+RUN echo '#!/bin/bash\n\
+nginx\n\
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1 --proxy-headers --timeout-keep-alive 75' > /app/start.sh && \
+chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]
