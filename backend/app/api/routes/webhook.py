@@ -5,9 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from app.models.webhook import WebhookRead
 from app.api import deps
 
-router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+# Create two separate routers
+webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])
+webhook_private = APIRouter(
+    prefix="/webhooks", 
+    tags=["webhooks"],
+    dependencies=[Depends(deps.get_current_active_superuser)]
+)
 
-@router.post("/", response_model=WebhookRead)
+# Public POST endpoint on its own router
+@webhook_public.post("/", response_model=WebhookRead)
 async def create_webhook(
     *,
     request: Request,
@@ -32,11 +39,8 @@ async def create_webhook(
     
     return webhook_service.create_webhook(webhook_data)
 
-@router.get(
-    "/", 
-    response_model=List[WebhookRead],
-    dependencies=[Depends(deps.get_current_active_superuser)]
-)
+# Protected GET endpoints on separate router
+@webhook_private.get("/", response_model=List[WebhookRead])
 def read_webhooks(
     skip: int = 0,
     limit: int = 100,
@@ -47,11 +51,7 @@ def read_webhooks(
     """
     return webhook_service.get_webhooks(skip=skip, limit=limit)
 
-@router.get(
-    "/event/{event_type}", 
-    response_model=List[WebhookRead],
-    dependencies=[Depends(deps.get_current_active_superuser)]
-)
+@webhook_private.get("/event/{event_type}", response_model=List[WebhookRead])
 def read_webhooks_by_event(
     event_type: str,
     skip: int = 0,
@@ -67,11 +67,7 @@ def read_webhooks_by_event(
         limit=limit
     )
 
-@router.get(
-    "/{webhook_id}", 
-    response_model=WebhookRead,
-    dependencies=[Depends(deps.get_current_active_superuser)]
-)
+@webhook_private.get("/{webhook_id}", response_model=WebhookRead)
 def read_webhook(
     webhook_id: int,
     webhook_service: WebhookService = Depends(deps.get_webhook_service),
@@ -83,3 +79,8 @@ def read_webhook(
     if not webhook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     return webhook
+
+# Export both routers
+router = APIRouter()
+router.include_router(webhook_public)
+router.include_router(webhook_private)
