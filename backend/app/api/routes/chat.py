@@ -17,14 +17,15 @@ async def chat_endpoint(
     try:
         llm_service = await get_llm_service(session, current_user)
 
+        # Get the user message
+        user_message = request.user_message if isinstance(request.user_message, str) else request.user_message[-1].content
+        if not user_message:
+            raise HTTPException(status_code=400, detail="User message is required")
+
         # Get the bot's response
         bot_response = llm_service.query(request.user_message)
-
-        # Prepare user_message for conversation storage
-        user_message = (
-            request.user_message if isinstance(request.user_message, str)
-            else request.user_message[-1].role  # Get the last user message from the conversation
-        )
+        if not bot_response:
+            raise HTTPException(status_code=500, detail="Failed to get bot response")
 
         # Save the conversation
         conversation_result = llm_service.create_or_update_conversation(
@@ -39,9 +40,13 @@ async def chat_endpoint(
             bot_response=bot_response,
             conversation_id=conversation_result.get("conversation_id"),
         )
+    except HTTPException as he:
+        raise he
     except Exception as e:
+        print(f"Error in chat_endpoint: {str(e)}")  # Add this debug line
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=str(e)
         )
 
 
