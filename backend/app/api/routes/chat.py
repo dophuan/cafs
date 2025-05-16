@@ -23,7 +23,7 @@ async def chat_endpoint(
         # Prepare user_message for conversation storage
         user_message = (
             request.user_message if isinstance(request.user_message, str)
-            else request.user_message[-1].user  # Get the last user message from the conversation
+            else request.user_message[-1].role  # Get the last user message from the conversation
         )
 
         # Save the conversation
