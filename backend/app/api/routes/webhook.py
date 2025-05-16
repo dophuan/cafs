@@ -13,7 +13,7 @@ webhook_private = APIRouter(
     dependencies=[Depends(deps.get_current_active_superuser)]
 )
 
-# Public POST endpoint on its own router
+# Public POST endpoint on its own router, user must send the correct signature
 @webhook_public.post("/", response_model=WebhookRead)
 async def create_webhook(
     *,
