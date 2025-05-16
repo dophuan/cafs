@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
+from openai import OpenAI
 
 from app.models.message import LLMConversation
 
@@ -58,16 +59,16 @@ class LLMService:
         self.local_endpoint = local_endpoint
 
     def query(self, prompt: Union[str, List[MessageContent]]) -> str:
-        if self.local_endpoint:
-            try:
-                print(f"Attempting to connect to LLM at: {self.local_endpoint}")
-                
-                messages = []
-                if isinstance(prompt, str):
-                    messages = [{"role": "user", "content": prompt}]
-                else:
-                    messages = [{"role": msg.role, "content": msg.content} for msg in prompt]
+        try:
+            print(f"Attempting to connect to LLM")
+            
+            messages = []
+            if isinstance(prompt, str):
+                messages = [{"role": "user", "content": prompt}]
+            else:
+                messages = [{"role": msg.role, "content": msg.content} for msg in prompt]
 
+            if self.local_endpoint:
                 headers = {
                     "Content-Type": "application/json"
                 }
@@ -80,8 +81,6 @@ class LLMService:
                     "stream": False
                 }
 
-                print("Sending payload:", payload)
-                
                 response = requests.post(
                     f"{self.local_endpoint}/v1/chat/completions",
                     headers=headers,
@@ -89,22 +88,29 @@ class LLMService:
                     timeout=30
                 )
                 
-                print(f"Response status: {response.status_code}")
-                print(f"Response body: {response.text}")
-                
                 response.raise_for_status()
                 json_response = response.json()
                 
                 if "choices" in json_response and len(json_response["choices"]) > 0:
                     return str(json_response["choices"][0]["message"]["content"]).strip()
                 return ""
-                    
-            except requests.RequestException as e:
-                print(f"Error connecting to LLM: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Chat API request failed: {str(e)}"
+            else:
+                client = OpenAI(api_key=self.api_key)
+                response = client.chat.completions.create(
+                    model=self.engine or "gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=2000
                 )
+                
+                return response.choices[0].message.content.strip()
+                    
+        except requests.RequestException as e:
+            print(f"Error connecting to LLM: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Chat API request failed: {str(e)}"
+            )
 
     def list_conversations(
         self, page: int | None = None, page_size: int | None = None
