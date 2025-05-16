@@ -64,8 +64,11 @@ class WebhookService:
     def process_webhook_payload(self, payload_json: dict) -> WebhookCreate:
         """Process and validate webhook payload"""
         try:
+            # Map event_name to event_type if it exists, otherwise fallback to event_type or unknown
+            event_type = payload_json.get("event_name") or payload_json.get("event_type", "unknown")
+            
             return WebhookCreate(
-                event_type=payload_json.get("event_type", "unknown"),
+                event_type=event_type,
                 payload=payload_json
             )
         except ValueError as e:
