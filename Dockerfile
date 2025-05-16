@@ -1,27 +1,52 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Install system dependencies including PostgreSQL client
-RUN apt-get update && apt-get install -y \
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update && apt-get install -y \
     curl \
     postgresql-client \
     libpq-dev \
     gcc \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
 
 # Install uv
 RUN pip install uv
 
-# Copy dependency files first
+# Copy backend dependency files
 COPY ./backend/pyproject.toml /app/
 COPY ./backend/poetry.lock /app/
 
-# Install all dependencies using uv pip
+# Install all backend dependencies using uv pip
 RUN uv pip install --system .
 
-# Copy the rest of the application
+# Copy the backend application
 COPY ./backend /app
+
+# Setup frontend
+WORKDIR /app/frontend
+
+# Copy frontend dependency files
+COPY ./frontend/package*.json ./
+COPY ./frontend/tsconfig*.json ./
+COPY ./frontend/vite.config.ts ./
+COPY ./frontend/.env* ./
+
+# Install frontend dependencies
+RUN npm ci
+
+# Copy frontend source code
+COPY ./frontend/src ./src
+COPY ./frontend/public ./public
+COPY ./frontend/index.html ./
+
+# Build frontend
+RUN npm run build
+
+# Move back to main app directory
+WORKDIR /app
 
 # Copy the Zalo verification file to a static directory
 RUN mkdir -p /app/static
