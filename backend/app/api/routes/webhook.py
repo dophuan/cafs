@@ -6,14 +6,14 @@ from app.models.webhook import WebhookRead
 from app.api import deps
 
 # Create two separate routers
-webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])
+webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])  # Only for POST
 webhook_private = APIRouter(
-    prefix="/webhooks", 
+    prefix="/webhook-history",  # Different path for all GET operations
     tags=["webhooks"],
     dependencies=[Depends(deps.get_current_active_superuser)]
 )
 
-# Public POST endpoint on its own router, user must send the correct signature
+# Public POST endpoint - /webhooks is exclusively for receiving webhooks
 @webhook_public.post("/", response_model=WebhookRead)
 async def create_webhook(
     *,
@@ -39,7 +39,7 @@ async def create_webhook(
     
     return webhook_service.create_webhook(webhook_data)
 
-# Protected GET endpoints on separate router
+# All GET operations moved to /webhook-history
 @webhook_private.get("/", response_model=List[WebhookRead])
 def read_webhooks(
     skip: int = 0,
