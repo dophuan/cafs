@@ -5,7 +5,6 @@ from sqlalchemy import Column, JSON
 
 class WebhookBase(SQLModel):
     event_type: str = Field(index=True)
-    # Use SQLAlchemy JSON type for the payload field
     payload: Dict[str, Any] = Field(
         default={},
         sa_column=Column(JSON)

@@ -1,6 +1,6 @@
 from typing import List, Any
 from app.api.services.webhook import WebhookService
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, Header, Response
 
 from app.models.webhook import WebhookRead
 from app.api import deps
@@ -14,13 +14,13 @@ webhook_private = APIRouter(
 )
 
 # Public POST endpoint - /webhooks is exclusively for receiving webhooks
-@webhook_public.post("/", response_model=WebhookRead)
+@webhook_public.post("/")  # Remove response_model as we're returning just 200 OK
 async def create_webhook(
     *,
     request: Request,
     webhook_service: WebhookService = Depends(deps.get_webhook_service),
     x_webhook_signature: str = Header(None)
-) -> Any:
+) -> Response:
     """
     Receive webhook events - public endpoint
     """
@@ -39,7 +39,7 @@ async def create_webhook(
     
     return webhook_service.create_webhook(webhook_data)
 
-# All GET operations moved to /webhook-history
+# Rest of the code remains the same
 @webhook_private.get("/", response_model=List[WebhookRead])
 def read_webhooks(
     skip: int = 0,
