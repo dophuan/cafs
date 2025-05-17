@@ -11,12 +11,12 @@ class InventoryService:
         intent: Dict[str, Any]
     ) -> Dict[str, Any]:
         handlers = {
-            "check_stock": self.check_stock,
-            "create_receipt": self.create_receipt,
-            "update_stock": self.update_stock,
-            "add_item": self.add_item,
-            "update_item": self.update_item,
-            "search_product": self.search_product
+            "Checking stock levels": self.check_stock,
+            "Creating a receipt": self.create_receipt,
+            "Updating stock quantities": self.update_stock,
+            "Adding new items": self.add_item,
+            "Updating stock quantities": self.update_item,
+            "Searching for products": self.search_product
         }
         
         handler = handlers.get(intent.get("intent"))

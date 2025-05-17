@@ -104,26 +104,26 @@ class WebhookService:
         """Main webhook processing method using utilities"""
         try:
             # 1. Parse Zalo message
-            event_type, event_data = self.zalo_parser.parse_message(payload)
+            event_type, parsed_data = self.zalo_parser.parse_message(payload)
             
             # 2. Store conversation and get intent analysis
             conversation_result = await self.conversation_handler.process_conversation(
                 event_type,
-                event_data)
-            
-            logger.info(f"LOGS: Event type and data {event_type}, {event_data}")
+                parsed_data)
+
             # 3. Handle inventory actions if needed
             result = {
                 "status": "success",
                 "conversation_id": conversation_result.get("conversation_id"),
-                "event_type": event_data.get("event_type")
+                "event_type": event_type
             }
-            logger.info(f"Processed results {result}")
+
+            final_intent = conversation_result.get("intent")
 
             # Only process inventory actions for text messages with intent
-            if conversation_result.get("intent"):
+            if final_intent:
                 inventory_action = await self.inventory_handler.handle_inventory_action(
-                    conversation_result["intent"]
+                    final_intent
                 )
                 result["inventory_action"] = inventory_action
 

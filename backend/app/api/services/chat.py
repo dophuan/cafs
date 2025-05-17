@@ -59,11 +59,8 @@ class LLMService:
         self.local_endpoint = local_endpoint
 
     def query(self, prompt: Union[str, List[MessageContent]]) -> str:
-        try:
-            print(f"Attempting to connect to LLM")
-            
+        try:            
             messages = []
-            print(f"Message {prompt}")
             if isinstance(prompt, str):
                 messages = [{"role": "user", "content": prompt}]
             else:

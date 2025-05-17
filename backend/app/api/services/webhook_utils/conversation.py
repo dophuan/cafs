@@ -43,7 +43,7 @@ class ConversationService:
 
     async def analyze_intent(self, message: str) -> Dict[str, Any]:
         try:
-            system_prompt = """You are an AI assistant helping with inventory management.
+            system_prompt = """You are an Vietnamese AI assistant helping with inventory management.
             Analyze the message and identify if it's related to:
             - Checking stock levels
             - Creating a receipt
@@ -55,14 +55,17 @@ class ConversationService:
             Return JSON with identified intent and relevant parameters."""
 
             messages = [
-                MessageContent(role="system", content=system_prompt),
+                MessageContent(role="assistant", content=system_prompt),
                 MessageContent(role="user", content=message)
             ]
             
             response = self.llm_service.query(messages)
-            return json.loads(response)
+            
+            # Clean the response by removing markdown formatting
+            cleaned_response = response.replace("```json", "").replace("```", "").strip()
+            return json.loads(cleaned_response)
         except Exception as e:
-            logger.error(f"Raise error while processing webhook: {str(e)}")
+            logger.error(f"Raise error while processing conversation: {str(e)}")
             return {
                 "intent": None,
                 "parameters": {},

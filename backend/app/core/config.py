@@ -68,9 +68,7 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
         if self.ENVIRONMENT == "production":
-            logger.info(f"LOGS-CONFIG: Using prod config")
             return f'postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@/{self.POSTGRES_DB}?host=/cloudsql/{self.POSTGRES_SERVER}'
-        logger.info(f"LOGS-CONFIG: Using config local")
         return MultiHostUrl.build(
                 scheme="postgresql+psycopg",
                 username=self.POSTGRES_USER,
