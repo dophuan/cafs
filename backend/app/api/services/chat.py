@@ -68,6 +68,24 @@ class LLMService:
             else:
                 messages = [{"role": msg.role, "content": msg.content} for msg in prompt]
 
+            # First try OpenAI if API key is available
+            if self.api_key:
+                try:
+                    client = OpenAI(api_key=self.api_key)
+                    response = client.chat.completions.create(
+                        model=self.engine or "gpt-3.5-turbo",
+                        messages=messages,
+                        temperature=0.7,
+                        max_tokens=2000
+                    )
+                    return response.choices[0].message.content.strip()
+                except Exception as e:
+                    print(f"OpenAI API error: {str(e)}")
+                    # If OpenAI fails and local endpoint is available, fall back to local
+                    if not self.local_endpoint:
+                        raise
+
+            # Fall back to local endpoint if OpenAI is not configured or failed
             if self.local_endpoint:
                 headers = {
                     "Content-Type": "application/json"
@@ -94,16 +112,11 @@ class LLMService:
                 if "choices" in json_response and len(json_response["choices"]) > 0:
                     return str(json_response["choices"][0]["message"]["content"]).strip()
                 return ""
-            else:
-                client = OpenAI(api_key=self.api_key)
-                response = client.chat.completions.create(
-                    model=self.engine or "gpt-3.5-turbo",
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=2000
-                )
-                
-                return response.choices[0].message.content.strip()
+
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No LLM service available"
+            )
                     
         except requests.RequestException as e:
             print(f"Error connecting to LLM: {str(e)}")
@@ -112,6 +125,7 @@ class LLMService:
                 detail=f"Chat API request failed: {str(e)}"
             )
 
+    # Rest of the methods remain unchanged
     def list_conversations(
         self, page: int | None = None, page_size: int | None = None
     ) -> dict[str, Any]:
