@@ -31,9 +31,9 @@ def get_url():
         DB_PASS = quote_plus(os.getenv("POSTGRES_PASSWORD")) 
         DB_NAME = os.getenv("POSTGRES_DB")
         DB_HOST = os.getenv("POSTGRES_SERVER")
-        
+        print(f"Using PROD ENV")
         return f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
-    
+    print(f"Using local env")
     return str(settings.SQLALCHEMY_DATABASE_URI)
 
 def run_migrations_offline():

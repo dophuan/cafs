@@ -1,3 +1,4 @@
+import logging
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
@@ -15,6 +16,12 @@ from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, str) and not v.startswith("["):
@@ -60,8 +67,11 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        if self.ENVIRONMENT == "local":
-            return MultiHostUrl.build(
+        if self.ENVIRONMENT == "production":
+            logger.info(f"LOGS-CONFIG: Using prod config")
+            return f'postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@/{self.POSTGRES_DB}?host=/cloudsql/{self.POSTGRES_SERVER}'
+        logger.info(f"LOGS-CONFIG: Using config local")
+        return MultiHostUrl.build(
                 scheme="postgresql+psycopg",
                 username=self.POSTGRES_USER,
                 password=self.POSTGRES_PASSWORD,
@@ -69,8 +79,6 @@ class Settings(BaseSettings):
                 port=self.POSTGRES_PORT,
                 path=self.POSTGRES_DB,
             )
-        if self.ENVIRONMENT == "production":
-            return f'postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@/{self.POSTGRES_DB}?host=/cloudsql/{self.POSTGRES_SERVER}'
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
