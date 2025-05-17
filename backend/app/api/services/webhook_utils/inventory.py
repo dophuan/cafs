@@ -1,6 +1,14 @@
 from typing import Dict, Any
 from sqlmodel import Session, select
 from app.models.item import Item
+from app.api.constants.actions import (
+    CHECK_STOCK_LEVELS,
+    CREATE_RECEIPT,
+    UPDATE_STOCK_QUANTITIES,
+    ADD_NEW_ITEMS, 
+    UPDATE_ITEM,
+    SEARCH_PRODUCTS
+)
 
 class InventoryService:
     def __init__(self, db: Session):
@@ -11,12 +19,12 @@ class InventoryService:
         intent: Dict[str, Any]
     ) -> Dict[str, Any]:
         handlers = {
-            "Checking stock levels": self.check_stock,
-            "Creating a receipt": self.create_receipt,
-            "Updating stock quantities": self.update_stock,
-            "Adding new items": self.add_item,
-            "Updating stock quantities": self.update_item,
-            "Searching for products": self.search_product
+            CHECK_STOCK_LEVELS: self.check_stock,
+            CREATE_RECEIPT: self.create_receipt,
+            UPDATE_STOCK_QUANTITIES: self.update_stock,
+            ADD_NEW_ITEMS: self.add_item,
+            UPDATE_ITEM: self.update_item,
+            SEARCH_PRODUCTS: self.search_product
         }
         
         handler = handlers.get(intent.get("intent"))

@@ -45,12 +45,12 @@ class ConversationService:
         try:
             system_prompt = """You are an Vietnamese AI assistant helping with inventory management.
             Analyze the message and identify if it's related to:
-            - Checking stock levels
-            - Creating a receipt
-            - Updating stock quantities
-            - Adding new items
-            - Updating item details
-            - Searching for products
+            - CHECK_STOCK_LEVELS
+            - CREATE_RECEIPT
+            - UPDATE_STOCK_QUANTITIES
+            - ADD_NEW_ITEMS
+            - UPDATE_ITEM
+            - SEARCH_PRODUCTS
             
             Return JSON with identified intent and relevant parameters."""
 
