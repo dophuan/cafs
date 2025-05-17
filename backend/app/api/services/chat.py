@@ -63,6 +63,7 @@ class LLMService:
             print(f"Attempting to connect to LLM")
             
             messages = []
+            print(f"Message {prompt}")
             if isinstance(prompt, str):
                 messages = [{"role": "user", "content": prompt}]
             else:

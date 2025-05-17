@@ -1,20 +1,20 @@
 from typing import List, Any
 from app.api.services.webhook import WebhookService
 from fastapi import APIRouter, Depends, HTTPException, Request, Header, Response
+from fastapi.responses import JSONResponse
 
 from app.models.webhook import WebhookRead
 from app.api import deps
 
 # Create two separate routers
-webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])  # Only for POST
+webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])
 webhook_private = APIRouter(
-    prefix="/webhook-history",  # Different path for all GET operations
+    prefix="/webhook-history",
     tags=["webhooks"],
     dependencies=[Depends(deps.get_current_active_superuser)]
 )
 
-# Public POST endpoint - /webhooks is exclusively for receiving webhooks
-@webhook_public.post("/")  # Remove response_model as we're returning just 200 OK
+@webhook_public.post("/")
 async def create_webhook(
     *,
     request: Request,
@@ -34,12 +34,30 @@ async def create_webhook(
             detail="Invalid webhook signature"
         )
     
-    payload_json = await request.json()
-    webhook_data = webhook_service.process_webhook_payload(payload_json)
-    
-    return webhook_service.create_webhook(webhook_data)
+    try:
+        payload_json = await request.json()
+        
+        # First store the raw webhook data
+        webhook_data = webhook_service.process_webhook_payload(payload_json)
+        webhook = webhook_service.create_webhook(webhook_data)
+        
+        # Then process the Zalo event and handle any inventory actions
+        result = await webhook_service.process_webhook(payload_json)
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "webhook_id": webhook.id,
+                "result": result
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error create processing webhook: {str(e)}"
+        )
 
-# Rest of the code remains the same
 @webhook_private.get("/", response_model=List[WebhookRead])
 def read_webhooks(
     skip: int = 0,
