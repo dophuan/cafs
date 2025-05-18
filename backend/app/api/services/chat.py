@@ -1,4 +1,3 @@
-import json
 import uuid
 from datetime import datetime
 from typing import Any, Union, List, Dict
@@ -16,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
+from app.core.config import settings
 from openai import OpenAI
 
 from app.models.message import LLMConversation
@@ -413,4 +413,56 @@ class LLMService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create/update conversation: {str(e)}",
+            )
+        
+    async def send_group_message(self, group_id: str, text: str) -> Dict[str, Any]:
+        """
+        Send a text message to a Zalo group using the Zalo Open API
+        
+        Args:
+            group_id: The ID of the Zalo group
+            text: The text message to send
+            
+        Returns:
+            Dict containing the response from Zalo API
+        """
+        try:
+            url = "https://openapi.zalo.me/v3.0/oa/group/message"
+            
+            headers = {
+                "access_token": settings.ZALO_ACCESS_TOKEN,
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "recipient": {
+                    "group_id": group_id
+                },
+                "message": {
+                    "text": text
+                }
+            }
+            
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            print(f"Response {response}")
+            
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send Zalo group message: {str(e)}"
+            )
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Unexpected error sending Zalo group message: {str(e)}"
             )

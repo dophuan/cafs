@@ -109,9 +109,9 @@ class WebhookService:
             # 2. Store conversation and get intent analysis
             conversation_result = await self.conversation_handler.process_conversation(
                 event_type,
-                parsed_data)
+                parsed_data
+            )
 
-            # 3. Handle inventory actions if needed
             result = {
                 "status": "success",
                 "conversation_id": conversation_result.get("conversation_id"),
@@ -119,21 +119,38 @@ class WebhookService:
             }
 
             final_intent = conversation_result.get("intent")
-
-            # Only process inventory actions for text messages with intent
-            if final_intent:
+            
+            # Handle normal conversation response
+            if (final_intent.get("intent") == "NORMAL_CONVERSATION" and 
+                conversation_result.get("response_text") and 
+                conversation_result.get("group_id")):
+                
+                group_id=conversation_result["group_id"],
+                text=conversation_result["response_text"]
+                print(f"Group id: {group_id}")
+                print(f"Response text: {text}")
+                # Send response back to Zalo group
+                await self.llm_service.send_group_message(
+                    group_id=conversation_result["group_id"],
+                    text=conversation_result["response_text"]
+                )
+                result["response_sent"] = True
+            
+            # Handle inventory actions
+            elif final_intent:
                 inventory_action = await self.inventory_handler.handle_inventory_action(
                     final_intent
                 )
+                logger.info(f"LOGS the action {inventory_action}")
                 result["inventory_action"] = inventory_action
 
             return result
 
         except Exception as e:
-            logger.error(f"Raise error while processing webhook: {str(e)}")
+            logger.error(f"Error processing webhook: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Error details of processing webhook: {str(e)}"
+                detail=f"Error processing webhook: {str(e)}"
             )
 
     async def process_zalo_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -278,6 +295,7 @@ class WebhookService:
         group_id = payload.get("recipient", {}).get("id")
         file_info = payload.get("message", {}).get("attachments", [{}])[0].get("payload", {})
         
+        logger.info(f"LOGS User send group message")
         webhook_data = WebhookCreate(
             event_type="user_send_group_file",
             payload=payload

@@ -7,7 +7,8 @@ from app.api.constants.actions import (
     UPDATE_STOCK_QUANTITIES,
     ADD_NEW_ITEMS, 
     UPDATE_ITEM,
-    SEARCH_PRODUCTS
+    SEARCH_PRODUCTS,
+    NORMAL_CONVERSATION
 )
 
 class InventoryService:
@@ -24,7 +25,8 @@ class InventoryService:
             UPDATE_STOCK_QUANTITIES: self.update_stock,
             ADD_NEW_ITEMS: self.add_item,
             UPDATE_ITEM: self.update_item,
-            SEARCH_PRODUCTS: self.search_product
+            SEARCH_PRODUCTS: self.search_product,
+            NORMAL_CONVERSATION: self.normal_conversation
         }
         
         handler = handlers.get(intent.get("intent"))
@@ -80,6 +82,14 @@ class InventoryService:
         print(f"Searching products with parameters: {params}")
         return {
             "action": "search_product",
+            "status": "success",
+            "params": params
+        }
+    
+    async def normal_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        print(f"Payload {params}")
+        return {
+            "action": "normal_conversation",
             "status": "success",
             "params": params
         }

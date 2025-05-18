@@ -22,28 +22,29 @@ class ConversationService:
             engine=settings.OPENAI_ENGINE
         )
 
-    async def process_conversation(
-        self, 
-        event_type: str, 
-        parsed_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        # Only analyze text messages for inventory actions
-        if "text" in event_type and parsed_data.get("message_text"):
-            intent = await self.analyze_intent(parsed_data["message_text"])
-            parsed_data["llm_analysis"] = intent
+    # async def process_conversation(
+    #     self, 
+    #     event_type: str, 
+    #     parsed_data: Dict[str, Any]
+    # ) -> Dict[str, Any]:
+    #     # Only analyze text messages for inventory actions
+    #     if "text" in event_type and parsed_data.get("message_text"):
+    #         intent = await self.analyze_intent(parsed_data["message_text"])
+    #         parsed_data["llm_analysis"] = intent
         
-        # Store conversation
-        conversation = await self.store_conversation(parsed_data)
+    #     # Store conversation
+    #     conversation = await self.store_conversation(parsed_data)
         
-        return {
-            "conversation_id": conversation.id,
-            "intent": parsed_data.get("llm_analysis", {}),
-            "parsed_data": parsed_data
-        }
+    #     return {
+    #         "conversation_id": conversation.id,
+    #         "intent": parsed_data.get("llm_analysis", {}),
+    #         "parsed_data": parsed_data
+    #     }
 
     async def analyze_intent(self, message: str) -> Dict[str, Any]:
         try:
-            system_prompt = """You are an Vietnamese AI assistant helping with inventory management.
+            # Must mention to active
+            system_prompt = """You are an Vietnamese AI assistant helping my company named "Trident Digital" (a.k.a Trident) with inventory management.
             Analyze the message and identify if it's related to:
             - CHECK_STOCK_LEVELS
             - CREATE_RECEIPT
@@ -51,6 +52,8 @@ class ConversationService:
             - ADD_NEW_ITEMS
             - UPDATE_ITEM
             - SEARCH_PRODUCTS
+            - NORMAL_CONVERSATION
+            You may be called as ["ad", "admin", "ác min", "bot", "Trident"]
             
             Return JSON with identified intent and relevant parameters."""
 
@@ -79,3 +82,44 @@ class ConversationService:
         self.db.commit()
         self.db.refresh(db_conversation)
         return db_conversation
+
+    async def handle_normal_conversation(self, message: str) -> str:
+        """Generate Vietnamese response for normal conversation"""
+        system_prompt = """You are a friendly Vietnamese AI assistant for Trident Digital company. 
+        Keep responses natural, helpful and concise (under 100 words). 
+        You may be called as "ad", "admin", "ác min", "bot", or "Trident".
+        Respond in Vietnamese with a friendly, professional tone."""
+
+        messages = [
+            MessageContent(role="assistant", content=system_prompt),
+            MessageContent(role="user", content=message)
+        ]
+        
+        return self.llm_service.query(messages)
+    
+    async def process_conversation(
+        self, 
+        event_type: str, 
+        parsed_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        response_text = None
+        
+        if "text" in event_type and parsed_data.get("message_text"):
+            # Analyze intent
+            intent = await self.analyze_intent(parsed_data["message_text"])
+            parsed_data["llm_analysis"] = intent
+            
+            # Generate response for normal conversation
+            if intent.get("intent") == "NORMAL_CONVERSATION":
+                response_text = await self.handle_normal_conversation(parsed_data["message_text"])
+
+        # Store conversation
+        conversation = await self.store_conversation(parsed_data)
+        
+        return {
+            "conversation_id": conversation.id,
+            "intent": parsed_data.get("llm_analysis", {}),
+            "parsed_data": parsed_data,
+            "response_text": response_text,
+            "group_id": parsed_data.get("group_id")
+        }

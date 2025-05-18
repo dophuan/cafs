@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     OPENAI_ENGINE: str | None = None
     LOCAL_LLM_ENDPOINT: str | None = None
     WEBHOOK_SECRET_KEY: str | None = None
+    ZALO_ACCESS_TOKEN: str | None = None
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
