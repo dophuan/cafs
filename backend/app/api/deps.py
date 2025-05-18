@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from typing import Annotated
 
-from app.api.services.webhook import WebhookService
+from app.api.services.webhook.webhook import WebhookService
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer

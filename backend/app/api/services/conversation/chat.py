@@ -15,7 +15,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
-from app.core.config import settings
 from openai import OpenAI
 
 from app.models.message import LLMConversation
@@ -415,54 +414,86 @@ class LLMService:
                 detail=f"Failed to create/update conversation: {str(e)}",
             )
         
-    async def send_group_message(self, group_id: str, text: str) -> Dict[str, Any]:
+    async def parse_product_query(self, user_message: str) -> Dict[str, Any]:
         """
-        Send a text message to a Zalo group using the Zalo Open API
+        Use LLM to parse user's natural language query about paint products into structured search parameters
+        based on all available columns in the item table
+        """
+        system_prompt = """You are an AI assistant for Trident Digital, a major paint manufacturing company. Your task is to analyze customer queries about paint products and extract search parameters based on our database structure.
         
-        Args:
-            group_id: The ID of the Zalo group
-            text: The text message to send
-            
-        Returns:
-            Dict containing the response from Zalo API
+        Available fields for search:
+        - title: Product name/title
+        - description: Product description
+        - sku: Product SKU (format: PNT-XXXX)
+        - category: Paint category (Sơn Nội Thất, Sơn Ngoại Thất, Sơn Lót, Sơn Đặc Biệt)
+        - price: Product price in VND
+        - quantity: Current stock quantity
+        - dimensions: JSON object containing height, width, depth, weight, unit
+        - color_code: Color code or name
+        - specifications: JSON object containing:
+            - finish: Surface finish (Mờ, Mịn, Bóng Mờ, Bóng)
+            - coverage: Coverage area
+            - dry_time: Drying time
+            - base_type: Base type (Gốc Nước, Gốc Dầu)
+        - tags: Array of product tags
+        - status: Product status (active, out_of_stock, discontinued)
+        - unit: Unit of measurement (Lít)
+        - barcode: Product barcode
+        - supplier_id: Supplier identifier
+        - reorder_point: Minimum stock level before reorder
+        - max_stock: Maximum stock level
+
+        Return a JSON object containing any mentioned search parameters. Only include fields that are relevant to the query.
+        
+        Example output:
+        {
+            "search_parameters": {
+                "category": "Sơn Ngoại Thất",
+                "color_code": "kem",
+                "price": {"operator": "<", "value": 400000},
+                "specifications": {"finish": "bóng"},
+                "status": "active"
+            },
+            "sort_parameters": {
+                "field": "price",
+                "order": "asc"
+            }
+        }
         """
+
+        user_prompt = f"Parse this query and extract relevant search parameters: {user_message}"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
         try:
-            url = "https://openapi.zalo.me/v3.0/oa/group/message"
+            response = self.query(messages)
             
-            headers = {
-                "access_token": settings.ZALO_ACCESS_TOKEN,
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "recipient": {
-                    "group_id": group_id
-                },
-                "message": {
-                    "text": text
+            try:
+                import json
+                parsed_result = json.loads(response)
+                
+                # Validate and clean the parsed parameters
+                if not isinstance(parsed_result, dict):
+                    raise ValueError("Invalid response format")
+
+                return {
+                    "status": "success",
+                    "parameters": parsed_result
                 }
-            }
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
 
-            print(f"Response {response}")
-            
-            response.raise_for_status()
-            return response.json()
+            except json.JSONDecodeError as e:
+                return {
+                    "status": "error",
+                    "message": f"Failed to parse LLM response as JSON: {str(e)}",
+                    "parameters": {"search_term": user_message}
+                }
 
-        except requests.RequestException as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send Zalo group message: {str(e)}"
-            )
-            
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Unexpected error sending Zalo group message: {str(e)}"
-            )
+            return {
+                "status": "error",
+                "message": f"Error parsing product query: {str(e)}",
+                "parameters": {"search_term": user_message}
+            }

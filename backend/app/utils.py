@@ -10,7 +10,7 @@ from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 
 from app.api.deps import CurrentUser, SessionDep
-from app.api.services.chat import LLMService
+from app.api.services.conversation.chat import LLMService
 from app.core import security
 from app.core.config import settings
 

@@ -1,5 +1,5 @@
 from typing import List, Any
-from app.api.services.webhook import WebhookService
+from app.api.services.webhook.webhook import WebhookService
 from fastapi import APIRouter, Depends, HTTPException, Request, Header, Response
 from fastapi.responses import JSONResponse
 
