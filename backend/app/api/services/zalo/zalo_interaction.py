@@ -1,87 +1,78 @@
+from datetime import datetime, timedelta
 import json
 import requests
 from fastapi import HTTPException, status
 from typing import Dict, Any
 from app.core.config import settings
-from datetime import datetime, timedelta
-
+from app.api.services.zalo.zalo_encrypted_token import EncryptedFileTokenStorage
 class ZaloInteractionService:
     def __init__(self):
         self.app_secret_key = settings.ZALO_APP_SECRET_KEY
-        self.refresh_token = settings.ZALO_REFRESH_TOKEN
-        self._access_token = None
-        self._token_expiry = None
+        self.token_storage = EncryptedFileTokenStorage()
 
     def _get_access_token(self) -> str:
-        """
-        Get a new access token using the refresh token and store it with expiration time
-        """
         try:
-            # Check if we have a valid token
-            if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
-                return self._access_token
+            # Check if we have a valid stored token first
+            access_token, refresh_token, token_expiry = self.token_storage.get_tokens()
+            
+            # If we have a valid token that's not expired, return it immediately
+            if access_token and token_expiry and datetime.now() < token_expiry:
+                print("=== Using stored access token ===")
+                return access_token
 
+            print("=== Generating new access token ===")
+            # Only get new token if stored one is expired or missing
+            refresh_token = refresh_token or settings.ZALO_REFRESH_TOKEN
+            
             url = "https://oauth.zaloapp.com/v4/oa/access_token"
             
             payload = {
-                "refresh_token": self.refresh_token,
-                "app_id": settings.ZALO_APP_ID,
+                "refresh_token": refresh_token,
+                "app_id": str(settings.ZALO_APP_ID),
                 "grant_type": "refresh_token"
             }
 
-            print(f"Payload {json.dumps(payload)}")
-            
             headers = {
                 "secret_key": self.app_secret_key,
                 "Content-Type": "application/x-www-form-urlencoded"
             }
 
-            print(f"Header {json.dumps(headers)}")
-            
             response = requests.post(
                 url,
                 headers=headers,
                 data=payload,
                 timeout=30
             )
-            print(f"Response {json.dumps(response)}")
+            
             response.raise_for_status()
             result = response.json()
             
             if "access_token" not in result:
-                raise ValueError("No access token in response")
-                
-            self._access_token = result["access_token"]
-            # Set token expiry to 24 hours from now (to be safe, slightly less than the 25-hour limit)
-            self._token_expiry = datetime.now() + timedelta(hours=24)
-            return self._access_token
+                raise ValueError(f"No access token in response. Response content: {result}")
 
-        except requests.RequestException as e:
-            # Clear token data on error
-            self._access_token = None
-            self._token_expiry = None
+            # Store new tokens with 24 hour expiry
+            access_token = result["access_token"]
+            new_refresh_token = result.get("refresh_token")
+            
+            if new_refresh_token:
+                expiry = datetime.now() + timedelta(hours=24)
+                self.token_storage.store_tokens(access_token, new_refresh_token, expiry)
+            else:
+                raise ValueError("No refresh token in response")
+                
+            return access_token
+
+        except Exception as e:
+            print(f"Error getting access token: {str(e)}")
+            self.token_storage.clear_token()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to get Zalo access token: {str(e)}"
             )
-            
-        except Exception as e:
-            # Clear token data on error
-            self._access_token = None
-            self._token_expiry = None
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Unexpected error getting Zalo access token: {str(e)}"
-            )
 
     async def send_group_message(self, group_id: str, text: str) -> Dict[str, Any]:
-        """
-        Send a text message to a Zalo group using the Zalo Open API
-        """
         try:
-            # Get cached token or fetch new one if expired
-            access_token = self._get_access_token()
-
+            access_token = self._get_access_token()  # This will use cached token if valid
             url = "https://openapi.zalo.me/v3.0/oa/group/message"
             
             headers = {
@@ -104,11 +95,10 @@ class ZaloInteractionService:
                 json=payload,
                 timeout=30
             )
-            
-            # If token expired, clear cached token and retry once
+
+            # If token expired, clear it and try once with new token
             if response.status_code == 401:
-                self._access_token = None
-                self._token_expiry = None
+                self.token_storage.clear_token()
                 access_token = self._get_access_token()
                 headers["access_token"] = access_token
                 response = requests.post(
@@ -121,20 +111,13 @@ class ZaloInteractionService:
             response.raise_for_status()
             return response.json()
 
-        except requests.RequestException as e:
+        except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to send Zalo group message: {str(e)}"
             )
-            
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Unexpected error sending Zalo group message: {str(e)}"
-            )
         
     async def handle_normal_conversation(self, conversation_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle normal conversation response and send message"""
         if not conversation_result.get("response_text") or not conversation_result.get("group_id"):
             return {"response_sent": False}
             
@@ -156,7 +139,6 @@ class ZaloInteractionService:
         conversation_result: Dict[str, Any],
         inventory_action: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Handle inventory action responses and send to Zalo group"""
         try:
             if not conversation_result.get("group_id"):
                 return {"response_sent": False, "error": "No group ID provided"}

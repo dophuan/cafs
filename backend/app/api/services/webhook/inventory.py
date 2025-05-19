@@ -100,8 +100,11 @@ class InventoryService:
         Search products based on intent parameters
         """
         try:
+            print(f"Search intent params {intent_params}")
             conditions = SearchUtils.build_search_conditions(intent_params)
+            print(f"Condition: {conditions}")
             statement = SearchUtils.build_search_query(conditions)
+            print(f"statement: { statement }")
             items = self.db.exec(statement).all()
             
             if not items:

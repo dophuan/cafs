@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     ZALO_REFRESH_TOKEN: str | None = None
     ZALO_APP_SECRET_KEY: str | None = None
     ZALO_APP_ID: str | None = None
+    ENCRYPTION_KEY: str | None = None
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
