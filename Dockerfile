@@ -16,8 +16,10 @@ RUN pip install uv
 # Copy dependency files first
 COPY ./backend/pyproject.toml /app/
 
-# Install all dependencies using uv pip
-RUN uv pip install --system .
+# Install dependencies using uv pip
+# Add --dev to install dev dependencies too, or remove if not needed in production
+RUN uv pip install --system . && \
+    uv pip install --system pytest mypy ruff pre-commit types-passlib coverage
 
 # Copy the rest of the application
 COPY ./backend /app
