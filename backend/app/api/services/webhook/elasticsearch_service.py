@@ -12,15 +12,36 @@ logger = logging.getLogger(__name__)
 
 class ElasticSearchService:
     def __init__(self, hosts: List[str] = None):
-        if hosts is None:
-            elasticsearch_host = settings.ELASTICSEARCH_HOST or 'localhost'
-            hosts = [f'http://{elasticsearch_host}:9200']
+        # Check if we're using cloud configuration
+        if settings.ELASTICSEARCH_CLOUD_ID and settings.ELASTICSEARCH_API_KEY:
+            logger.info("Initializing Elasticsearch with cloud configuration")
+            self.client = Elasticsearch(
+                cloud_id=settings.ELASTICSEARCH_CLOUD_ID,
+                api_key=settings.ELASTICSEARCH_API_KEY,
+                request_timeout=30
+            )
+        # Check if we have a specific URL (like your GCP example)
+        elif settings.ELASTICSEARCH_URL and settings.ELASTICSEARCH_API_KEY:
+            logger.info("Initializing Elasticsearch with URL configuration")
+            self.client = Elasticsearch(
+                settings.ELASTICSEARCH_URL,
+                api_key=settings.ELASTICSEARCH_API_KEY,
+                request_timeout=30
+            )
+        # Fallback to local configuration
+        else:
+            logger.info("Initializing Elasticsearch with local configuration")
+            if hosts is None:
+                elasticsearch_host = settings.ELASTICSEARCH_HOST or 'localhost'
+                hosts = [f'http://{elasticsearch_host}:9200']
+            
+            self.client = Elasticsearch(
+                hosts,
+                request_timeout=30
+            )
         
-        self.client = Elasticsearch(
-            hosts,
-            request_timeout=30
-        )
-        self.index_name = 'products'
+        self.index_name = settings.ELASTICSEARCH_INDEX or 'cafs-demo-products'
+        logger.info(f"Elasticsearch initialized with index: {self.index_name}")
 
     async def setup_index(self) -> None:
         """Create index with mapping if it doesn't exist"""

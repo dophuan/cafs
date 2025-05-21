@@ -114,6 +114,15 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str | None = None
     ELASTICSEARCH_HOST: str = "elasticsearch"
 
+    # Elasticsearch configurations
+    ELASTICSEARCH_HOST: str | None = None
+    ELASTICSEARCH_INDEX: str | None = None
+    
+    # Cloud configurations
+    ELASTICSEARCH_CLOUD_ID: str | None = None
+    ELASTICSEARCH_API_KEY: str | None = None
+    ELASTICSEARCH_URL: str | None = None
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
