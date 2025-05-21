@@ -34,7 +34,7 @@ def parse_cors(v: Any) -> list[str] | str:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Use top level .env file (one level above ./backend/)
-        env_file="../.env",
+        # env_file="../.env",
         env_ignore_empty=True,
         extra="ignore",
     )
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str = ""
-    POSTGRES_DB: str = ""
+    POSTGRES_DB: str = "chaining_agent"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -108,7 +108,11 @@ class Settings(BaseSettings):
     OPENAI_ENGINE: str | None = None
     LOCAL_LLM_ENDPOINT: str | None = None
     WEBHOOK_SECRET_KEY: str | None = None
-    ZALO_ACCESS_TOKEN: str | None = None
+    ZALO_REFRESH_TOKEN: str | None = None
+    ZALO_APP_SECRET_KEY: str | None = None
+    ZALO_APP_ID: str | None = None
+    ENCRYPTION_KEY: str | None = None
+    ELASTICSEARCH_HOST: str = "elasticsearch"
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

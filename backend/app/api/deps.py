@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from typing import Annotated
 
-from app.api.services.webhook import WebhookService
+from app.api.services.webhook.webhook import WebhookService
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -58,9 +58,8 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
         )
     return current_user
 
-def get_webhook_service(
-    db: Session = Depends(get_db),
-) -> WebhookService:
-    return WebhookService(db)
+async def get_webhook_service(db: Session = Depends(get_db)) -> WebhookService:
+    service = WebhookService(db)
+    return service
 
 WebhookServiceDep = Annotated[WebhookService, Depends(get_webhook_service)]

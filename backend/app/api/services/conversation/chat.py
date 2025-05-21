@@ -1,3 +1,5 @@
+import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Union, List, Dict
@@ -9,16 +11,19 @@ from sqlalchemy import (
     Column,
     MetaData,
     Table,
+    and_,
     delete,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
-from app.core.config import settings
 from openai import OpenAI
 
 from app.models.message import LLMConversation
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class MessageContent(BaseModel):
     role: str
@@ -78,7 +83,7 @@ class LLMService:
                     )
                     return response.choices[0].message.content.strip()
                 except Exception as e:
-                    print(f"OpenAI API error: {str(e)}")
+                    logger.info(f"OpenAI API error: {str(e)}")
                     # If OpenAI fails and local endpoint is available, fall back to local
                     if not self.local_endpoint:
                         raise
@@ -117,7 +122,7 @@ class LLMService:
             )
                     
         except requests.RequestException as e:
-            print(f"Error connecting to LLM: {str(e)}")
+            logger.info(f"Error connecting to LLM: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Chat API request failed: {str(e)}"
@@ -273,8 +278,6 @@ class LLMService:
                 else conversation_id
             )
 
-            from sqlmodel import and_
-
             query_result = (
                 self.db.query(LLMConversation)
                 .filter(
@@ -415,54 +418,134 @@ class LLMService:
                 detail=f"Failed to create/update conversation: {str(e)}",
             )
         
-    async def send_group_message(self, group_id: str, text: str) -> Dict[str, Any]:
+    async def parse_product_query(self, user_message: str) -> Dict[str, Any]:
         """
-        Send a text message to a Zalo group using the Zalo Open API
-        
-        Args:
-            group_id: The ID of the Zalo group
-            text: The text message to send
-            
-        Returns:
-            Dict containing the response from Zalo API
+        Use LLM to parse Vietnamese user queries and convert them into search parameters
+        that can be used with SearchUtils
         """
+        system_prompt = """You are an AI assistant for Trident Digital, a major paint manufacturing company. Your task is to analyze Vietnamese customer queries about paint products and extract search parameters based on our database structure.
+
+    IMPORTANT: You must ONLY return a valid JSON object with the exact structure shown in the example. DO NOT include any other text or explanation.
+
+    Available fields for search:
+    - title: Tên sản phẩm
+    - description: Mô tả sản phẩm
+    - sku: Mã sản phẩm (định dạng: PNT-XXXX)
+    - category: Loại sơn (Sơn Nội Thất, Sơn Ngoại Thất, Sơn Lót, Sơn Đặc Biệt)
+    - price: Giá (VNĐ)
+    - quantity: Số lượng tồn kho
+    - color_code: Mã màu hoặc tên màu
+    - specifications: Thông số kỹ thuật:
+        - finish: Bề mặt (Mờ, Mịn, Bóng Mờ, Bóng)
+        - coverage: Độ phủ
+        - dry_time: Thời gian khô
+        - base_type: Loại gốc (Gốc Nước, Gốc Dầu)
+    - tags: Từ khóa sản phẩm
+    - status: Trạng thái (đang_bán, hết_hàng, ngừng_kinh_doanh)
+    - unit: Đơn vị tính (Lít)
+
+    When parsing price values:
+    - Convert word numbers to numeric values (e.g., "bốn trăm nghìn" -> 400000, 400k -> 400000, 4tr -> 4.000.000)
+    - Handle price ranges (e.g., "từ 200 đến 500k" -> {"min": 200000, "max": 500000})
+    - Handle comparisons (e.g., "dưới 400k" -> {"operator": "<", "value": 400000})
+
+    Example Vietnamese query: "tìm sơn ngoại thất màu kem giá dưới 400 nghìn bề mặt bóng và gốc nước"
+    Example output:
+    {
+        "search_parameters": {
+            "category": "Sơn Ngoại Thất",
+            "color_code": "kem",
+            "price": {"operator": "<", "value": 400000},
+            "specifications": {
+                "finish": "bóng",
+                "base_type": "Gốc Nước"
+            }
+        },
+        "sort_parameters": {
+            "field": "price",
+            "order": "asc"
+        }
+    }
+
+    REMEMBER: Return ONLY the JSON object, no other text."""
+
+        user_prompt = f"""Parse this Vietnamese query into the exact JSON format shown in the example. Query: "{user_message}"
+
+    IMPORTANT: Return ONLY the JSON object, no other text or explanation."""
+
+        messages = [
+            MessageContent(role="assistant", content=system_prompt),
+            MessageContent(role="user", content=user_prompt)
+        ]
+
         try:
-            url = "https://openapi.zalo.me/v3.0/oa/group/message"
+            response = self.query(messages)
             
-            headers = {
-                "access_token": settings.ZALO_ACCESS_TOKEN,
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "recipient": {
-                    "group_id": group_id
-                },
-                "message": {
-                    "text": text
+            if not response or not response.strip():
+                return {
+                    "status": "error",
+                    "message": "Empty response from LLM",
+                    "parameters": {"title": user_message}
                 }
-            }
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
 
-            print(f"Response {response}")
-            
-            response.raise_for_status()
-            return response.json()
+            try:
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
+                cleaned_response = cleaned_response.strip()
+                
+                parsed_result = json.loads(cleaned_response)
+                
+                if not isinstance(parsed_result, dict):
+                    raise ValueError("Invalid response format")
 
-        except requests.RequestException as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send Zalo group message: {str(e)}"
-            )
-            
+                # Extract search parameters
+                search_params = parsed_result.get("search_parameters", {})
+                
+                # Transform the parameters if needed to match SearchUtils expectations
+                transformed_params = search_params.copy()
+                
+                # Special handling for specifications
+                if "specifications" in transformed_params:
+                    specs = transformed_params["specifications"]
+                    # Ensure all spec values are strings
+                    transformed_params["specifications"] = {
+                        k: str(v) for k, v in specs.items()
+                    }
+
+                # Handle price formatting
+                if "price" in transformed_params:
+                    price_param = transformed_params["price"]
+                    if isinstance(price_param, dict):
+                        # Keep the existing format as SearchUtils can handle it
+                        pass
+                    else:
+                        # Convert simple price to exact match format
+                        transformed_params["price"] = {
+                            "operator": "=",
+                            "value": float(price_param)
+                        }
+
+                return {
+                    "status": "success",
+                    "parameters": transformed_params,
+                    "sort": parsed_result.get("sort_parameters")
+                }
+
+            except json.JSONDecodeError as e:
+                return {
+                    "status": "error",
+                    "message": f"Failed to parse LLM response as JSON: {str(e)}",
+                    "parameters": {"title": user_message}
+                }
+
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Unexpected error sending Zalo group message: {str(e)}"
-            )
+            return {
+                "status": "error",
+                "message": f"Error parsing product query: {str(e)}",
+                "parameters": {"title": user_message}
+            }

@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, Optional
 from sqlmodel import Session
 from app.core.config import settings
-from app.api.services.chat import LLMService, MessageContent
+from app.api.services.conversation.chat import LLMService, MessageContent
 from app.models.zalo import ZaloConversation, ZaloConversationCreate
 
 # Configure logging

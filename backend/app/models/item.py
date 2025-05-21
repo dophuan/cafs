@@ -1,10 +1,10 @@
-import uuid
+from uuid import UUID, uuid4
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Dict, List
 
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
-from sqlalchemy import String, Numeric
+from sqlalchemy import Integer, String, Numeric, text
 
 if TYPE_CHECKING:
     from .user import User
@@ -48,20 +48,31 @@ class ItemUpdate(SQLModel):
     reorder_point: int | None = None
     max_stock: int | None = None
 
-class Item(ItemBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    owner_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
-    owner: Optional["User"] = Relationship(back_populates="items")
+class Item(SQLModel, table=True):
+    class Config:
+        arbitrary_types_allowed = True
     
-    # Audit fields
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), nullable=False, onupdate=datetime.utcnow)
-    )
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    owner_id: UUID = Field(foreign_key="user.id", nullable=False)
+    title: str
+    description: str | None = None
+    sku: str | None = Field(default=None, sa_column=Column(String(50), index=True))
+    category: str | None = Field(default=None, sa_column=Column(String(100), index=True))
+    price: float | None = Field(default=None, sa_column=Column(Numeric(10, 2)))
+    quantity: int | None = Field(default=None, sa_column=Column(Integer))
+    dimensions: Dict | None = Field(default=None, sa_column=Column(JSONB))
+    color_code: str | None = Field(default=None, sa_column=Column(String(50), index=True))
+    specifications: Dict | None = Field(default=None, sa_column=Column(JSONB))
+    tags: List[str] | None = Field(default=None, sa_column=Column(ARRAY(String)))
+    status: str = Field(default="active", sa_column=Column(String(20), index=True))
+    unit: str | None = Field(default=None, sa_column=Column(String(20)))
+    barcode: str | None = Field(default=None, sa_column=Column(String(100)))
+    supplier_id: str | None = Field(default=None, sa_column=Column(String(100)))
+    reorder_point: int | None = Field(default=None, sa_column=Column(Integer))
+    max_stock: int | None = Field(default=None, sa_column=Column(Integer))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text('now()')))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text('now()')))
+    owner: Optional["User"] = Relationship(back_populates="items")
 
     class Config:
         json_encoders = {
@@ -69,8 +80,8 @@ class Item(ItemBase, table=True):
         }
 
 class ItemPublic(ItemBase):
-    id: uuid.UUID
-    owner_id: uuid.UUID
+    id: UUID
+    owner_id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -81,7 +92,7 @@ class ItemsPublic(SQLModel):
 # Additional models for specific operations
 
 class ItemStock(SQLModel):
-    id: uuid.UUID
+    id: UUID
     title: str
     sku: str | None
     quantity: int
@@ -100,14 +111,14 @@ class ItemSearch(SQLModel):
     specifications: Dict | None = None
 
 class ItemStockAdjustment(SQLModel):
-    id: uuid.UUID
+    id: UUID
     adjustment_type: str  # increase, decrease
     quantity: int
     reason: str | None = None
     reference_number: str | None = None
 
 class ItemSupplierInfo(SQLModel):
-    id: uuid.UUID
+    id: UUID
     supplier_id: str
     supplier_sku: str | None = None
     supplier_price: float | None = None

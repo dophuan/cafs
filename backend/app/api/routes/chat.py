@@ -1,7 +1,7 @@
 from typing import Any, List
 from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import CurrentUser, SessionDep
-from app.api.services.chat import ChatRequest, ChatResponse
+from app.api.services.conversation.chat import ChatRequest, ChatResponse
 from app.utils import get_llm_service
 
 router = APIRouter()
