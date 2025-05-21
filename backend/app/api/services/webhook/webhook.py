@@ -47,6 +47,10 @@ class WebhookService:
             payload,
             hashlib.sha256
         ).hexdigest()
+
+        logger.info(f"Received signature: {signature}")
+        logger.info(f"Expected signature: {expected_signature}")
+        logger.info(f"Payload: {payload.decode()}")
         
         return expected_signature == signature
 
