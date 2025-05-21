@@ -15,7 +15,6 @@ RUN pip install uv
 
 # Copy dependency files first
 COPY ./backend/pyproject.toml /app/
-COPY ./backend/poetry.lock /app/
 
 # Install all dependencies using uv pip
 RUN uv pip install --system .
