@@ -17,10 +17,8 @@ class ZaloInteractionService:
             
             # If we have a valid token that's not expired, return it immediately
             if access_token and token_expiry and datetime.now() < token_expiry:
-                print("=== Using stored access token ===")
                 return access_token
 
-            print("=== Generating new access token ===")
             # Only get new token if stored one is expired or missing
             refresh_token = refresh_token or settings.ZALO_REFRESH_TOKEN
             
@@ -63,7 +61,6 @@ class ZaloInteractionService:
             return access_token
 
         except Exception as e:
-            print(f"Error getting access token: {str(e)}")
             self.token_storage.clear_token()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

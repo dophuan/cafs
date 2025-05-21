@@ -50,9 +50,10 @@ class WebhookService:
         
         return expected_signature == signature
 
-    def create_webhook(self, webhook_data: WebhookCreate) -> Webhook:
+    async def create_webhook(self, webhook_data: WebhookCreate) -> Webhook:
         """Create a new webhook entry"""
         try:
+            await self.inventory_handler.sync_products_to_elasticsearch()
             db_webhook = Webhook.from_orm(webhook_data)
             self.db.add(db_webhook)
             self.db.commit()
@@ -121,6 +122,8 @@ class WebhookService:
             }
 
             final_intent = conversation_result.get("intent")
+            if final_intent:
+                final_intent["parameters"]["query"] = payload.get("message", {}).get("text")
             intent_type = final_intent.get("intent") if final_intent else None
 
             # Handle normal conversation response

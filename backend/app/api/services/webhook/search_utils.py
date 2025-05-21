@@ -1,98 +1,155 @@
+import logging
 from typing import Dict, Any, List, Union
+
+from sqlalchemy import or_
+from app.api.services.conversation.chat import LLMService
 from sqlmodel import select, and_
 from app.models.item import Item
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 class SearchUtils:
+    @classmethod
+    async def parse_and_build_conditions(cls, query: str, llm_service: LLMService) -> List[Any]:
+        """Parse natural language query and build search conditions"""
+        parsed_result = await llm_service.parse_product_query(query)
+        
+        if parsed_result["status"] == "error":
+            return []
+ 
+        return cls.build_search_conditions(parsed_result["parameters"])
+
     @staticmethod
     def build_search_conditions(params: Dict[str, Any]) -> List[Any]:
         """Build SQL conditions based on search parameters"""
         conditions = []
-        
-        # Basic text fields
-        text_fields = {
-            'title': Item.title,
-            'description': Item.description,
-            'sku': Item.sku,
-            'category': Item.category,
-            'color_code': Item.color_code,
-            'unit': Item.unit,
-            'barcode': Item.barcode,
-            'supplier_id': Item.supplier_id
-        }
-        
-        for field, column in text_fields.items():
-            if value := params.get(field):
-                conditions.append(column.ilike(f"%{value}%"))
 
-        # Numeric comparisons
-        numeric_fields = {
-            'price': Item.price,
-            'quantity': Item.quantity,
-            'reorder_point': Item.reorder_point,
-            'max_stock': Item.max_stock
-        }
-        
-        for field, column in numeric_fields.items():
-            if value := params.get(field):
-                conditions.extend(
-                    SearchUtils.build_numeric_conditions(column, value)
-                )
+        if not params:
+            return conditions
 
-        # Special fields
+        # For category, use OR between terms and add common paint category variations
+        if category := params.get('category'):
+            category_terms = category.lower().split()
+            category_conditions = []
+            
+            # Paint category variations in Vietnamese
+            paint_categories = [
+                'sơn', 'sơn nước', 'sơn dầu', 'sơn chống thấm', 
+                'sơn nội thất', 'sơn ngoại thất', 'sơn ngoài trời',
+                'sơn trong nhà', 'sơn đặc biệt', 'sơn epoxy',
+                'sơn lót', 'sơn phủ', 'sơn bóng', 'sơn mờ'
+            ]
+            
+            # Add original search terms
+            for term in category_terms:
+                category_conditions.append(Item.category.ilike(f"%{term}%"))
+                
+            # Add relevant paint categories based on search terms
+            for paint_cat in paint_categories:
+                if any(term in paint_cat for term in category_terms):
+                    category_conditions.append(Item.category.ilike(f"%{paint_cat}%"))
+            
+            if category_conditions:
+                conditions.append(or_(*category_conditions))
+
+        # For color, handle common paint color variations
+        if color := params.get('color_code'):
+            color_lower = color.lower()
+            color_conditions = []
+            
+            # Common color mappings in Vietnamese
+            color_mappings = {
+                'xanh': ['xanh dương', 'xanh lá', 'xanh biển', 'blue', 'green'],
+                'đỏ': ['red', 'đỏ tươi', 'đỏ đô'],
+                'vàng': ['yellow', 'vàng nhạt', 'vàng đậm'],
+                'trắng': ['white', 'trắng ngà', 'trắng sứ'],
+                'đen': ['black', 'đen bóng', 'đen mờ']
+            }
+            
+            # Add original color term
+            color_conditions.append(Item.color_code.ilike(f"%{color_lower}%"))
+            
+            # Add relevant color variations
+            for base_color, variations in color_mappings.items():
+                if base_color in color_lower:
+                    for variation in variations:
+                        color_conditions.append(Item.color_code.ilike(f"%{variation}%"))
+            
+            if color_conditions:
+                conditions.append(or_(*color_conditions))
+
+        # Price handling with paint-specific logic
+        if price_param := params.get('price'):
+            if isinstance(price_param, dict):
+                if 'operator' in price_param and 'value' in price_param:
+                    try:
+                        value = float(price_param['value'])
+                        operator_map = {
+                            '<': lambda: Item.price < value,
+                            '>': lambda: Item.price > value,
+                            '<=': lambda: Item.price <= value,
+                            '>=': lambda: Item.price >= value,
+                            '=': lambda: Item.price == value
+                        }
+                        if condition := operator_map.get(price_param['operator']):
+                            conditions.append(condition())
+                    except (ValueError, TypeError):
+                        logger.info(f"Invalid price value: {price_param['value']}")
+
+        # Paint-specific specifications handling
         if specs := params.get('specifications'):
-            conditions.extend(
-                SearchUtils.build_specification_conditions(specs)
-            )
-            
-        if tags := params.get('tags'):
-            conditions.extend(
-                SearchUtils.build_tag_conditions(tags)
-            )
-            
-        if status := params.get('status'):
-            conditions.append(Item.status == status)
-
-        return conditions
-
-    @staticmethod
-    def build_numeric_conditions(column: Any, value: Dict[str, Any]) -> List[Any]:
-        """Build conditions for numeric fields"""
-        conditions = []
-        
-        if isinstance(value, dict):
-            if 'min' in value and 'max' in value:
-                conditions.append(column.between(value['min'], value['max']))
-            elif 'min' in value:
-                conditions.append(column >= value['min'])
-            elif 'max' in value:
-                conditions.append(column <= value['max'])
-            elif 'value' in value and 'operator' in value:
-                operator_map = {
-                    '<': column < value['value'],
-                    '>': column > value['value'],
-                    '<=': column <= value['value'],
-                    '>=': column >= value['value'],
-                    '=': column == value['value']
+            if isinstance(specs, dict):
+                paint_specs = {
+                    'finish': ['bóng', 'mờ', 'semi-gloss', 'glossy', 'matte'],
+                    'base_type': ['nước', 'dầu', 'water-based', 'oil-based'],
+                    'usage': ['trong nhà', 'ngoài trời', 'interior', 'exterior'],
+                    'coverage': ['độ phủ', 'coverage'],
+                    'dry_time': ['thời gian khô', 'dry time']
                 }
-                if condition := operator_map.get(value['operator']):
-                    conditions.append(condition)
-                    
+                
+                for key, value in specs.items():
+                    if value and key in paint_specs:
+                        spec_conditions = []
+                        for spec_value in paint_specs[key]:
+                            if spec_value.lower() in str(value).lower():
+                                spec_conditions.append(
+                                    Item.specifications[key].astext.ilike(f"%{spec_value}%")
+                                )
+                        if spec_conditions:
+                            conditions.append(or_(*spec_conditions))
+
+        # Status handling
+        if status := params.get('status'):
+            if isinstance(status, str) and status.strip():
+                conditions.append(Item.status == status.strip())
+
+        # Tags handling with paint-specific tags
+        if tags := params.get('tags'):
+            paint_tags = ['eco-friendly', 'chống thấm', 'kháng khuẩn', 'chống nấm mốc', 
+                        'nhanh khô', 'dễ lau chùi', 'không mùi', 'chống phai màu']
+            
+            tag_conditions = []
+            if isinstance(tags, str) and tags.strip():
+                tag_conditions.append(Item.tags.contains([tags.strip()]))
+                # Add relevant paint tags
+                for paint_tag in paint_tags:
+                    if tags.lower() in paint_tag:
+                        tag_conditions.append(Item.tags.contains([paint_tag]))
+            elif isinstance(tags, list):
+                valid_tags = [tag for tag in tags if isinstance(tag, str) and tag.strip()]
+                if valid_tags:
+                    tag_conditions.append(Item.tags.contains(valid_tags))
+                    # Add relevant paint tags
+                    for tag in valid_tags:
+                        for paint_tag in paint_tags:
+                            if tag.lower() in paint_tag:
+                                tag_conditions.append(Item.tags.contains([paint_tag]))
+            
+            if tag_conditions:
+                conditions.append(or_(*tag_conditions))
+
         return conditions
-
-    @staticmethod
-    def build_specification_conditions(specs: Dict[str, Any]) -> List[Any]:
-        """Build conditions for specification fields"""
-        return [
-            Item.specifications[key].astext.ilike(f"%{value}%")
-            for key, value in specs.items()
-        ]
-
-    @staticmethod
-    def build_tag_conditions(tags: Union[str, List[str]]) -> List[Any]:
-        """Build conditions for tags array field"""
-        if isinstance(tags, str):
-            return [Item.tags.contains([tags])]
-        return [Item.tags.contains([tag]) for tag in tags]
 
     @staticmethod
     def build_search_query(conditions: List[Any]) -> Any:
@@ -113,7 +170,6 @@ class SearchUtils:
             "quantity": item.quantity,
             "status": "Còn hàng" if item.quantity > 0 else "Hết hàng",
             "specifications": item.specifications,
-            "dimensions": item.dimensions,
             "color_code": item.color_code,
             "unit": item.unit,
             "tags": item.tags
@@ -131,9 +187,11 @@ class SearchUtils:
         message = f"- {item['title']} (SKU: {item['sku']})\n"
         message += f"  Loại: {item['category']}\n"
         message += f"  Giá: {item['price']}\n"
-        message += f"  Số lượng: {item['quantity']} {item['unit']}\n"
         message += f"  Trạng thái: {item['status']}\n"
         
+        if color := item.get('color_code'):
+            message += f"  Màu sắc: {color}\n"
+            
         if specs := item.get('specifications'):
             message += SearchUtils.format_specifications_message(specs)
             

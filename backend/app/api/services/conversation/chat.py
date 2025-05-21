@@ -1,3 +1,5 @@
+import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Union, List, Dict
@@ -9,6 +11,7 @@ from sqlalchemy import (
     Column,
     MetaData,
     Table,
+    and_,
     delete,
     func,
 )
@@ -18,6 +21,9 @@ from sqlmodel import select as sqlmodel_select
 from openai import OpenAI
 
 from app.models.message import LLMConversation
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class MessageContent(BaseModel):
     role: str
@@ -77,7 +83,7 @@ class LLMService:
                     )
                     return response.choices[0].message.content.strip()
                 except Exception as e:
-                    print(f"OpenAI API error: {str(e)}")
+                    logger.info(f"OpenAI API error: {str(e)}")
                     # If OpenAI fails and local endpoint is available, fall back to local
                     if not self.local_endpoint:
                         raise
@@ -116,7 +122,7 @@ class LLMService:
             )
                     
         except requests.RequestException as e:
-            print(f"Error connecting to LLM: {str(e)}")
+            logger.info(f"Error connecting to LLM: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Chat API request failed: {str(e)}"
@@ -272,8 +278,6 @@ class LLMService:
                 else conversation_id
             )
 
-            from sqlmodel import and_
-
             query_result = (
                 self.db.query(LLMConversation)
                 .filter(
@@ -416,84 +420,132 @@ class LLMService:
         
     async def parse_product_query(self, user_message: str) -> Dict[str, Any]:
         """
-        Use LLM to parse user's natural language query about paint products into structured search parameters
-        based on all available columns in the item table
+        Use LLM to parse Vietnamese user queries and convert them into search parameters
+        that can be used with SearchUtils
         """
-        system_prompt = """You are an AI assistant for Trident Digital, a major paint manufacturing company. Your task is to analyze customer queries about paint products and extract search parameters based on our database structure.
-        
-        Available fields for search:
-        - title: Product name/title
-        - description: Product description
-        - sku: Product SKU (format: PNT-XXXX)
-        - category: Paint category (Sơn Nội Thất, Sơn Ngoại Thất, Sơn Lót, Sơn Đặc Biệt)
-        - price: Product price in VND
-        - quantity: Current stock quantity
-        - dimensions: JSON object containing height, width, depth, weight, unit
-        - color_code: Color code or name
-        - specifications: JSON object containing:
-            - finish: Surface finish (Mờ, Mịn, Bóng Mờ, Bóng)
-            - coverage: Coverage area
-            - dry_time: Drying time
-            - base_type: Base type (Gốc Nước, Gốc Dầu)
-        - tags: Array of product tags
-        - status: Product status (active, out_of_stock, discontinued)
-        - unit: Unit of measurement (Lít)
-        - barcode: Product barcode
-        - supplier_id: Supplier identifier
-        - reorder_point: Minimum stock level before reorder
-        - max_stock: Maximum stock level
+        system_prompt = """You are an AI assistant for Trident Digital, a major paint manufacturing company. Your task is to analyze Vietnamese customer queries about paint products and extract search parameters based on our database structure.
 
-        Return a JSON object containing any mentioned search parameters. Only include fields that are relevant to the query.
-        
-        Example output:
-        {
-            "search_parameters": {
-                "category": "Sơn Ngoại Thất",
-                "color_code": "kem",
-                "price": {"operator": "<", "value": 400000},
-                "specifications": {"finish": "bóng"},
-                "status": "active"
-            },
-            "sort_parameters": {
-                "field": "price",
-                "order": "asc"
+    IMPORTANT: You must ONLY return a valid JSON object with the exact structure shown in the example. DO NOT include any other text or explanation.
+
+    Available fields for search:
+    - title: Tên sản phẩm
+    - description: Mô tả sản phẩm
+    - sku: Mã sản phẩm (định dạng: PNT-XXXX)
+    - category: Loại sơn (Sơn Nội Thất, Sơn Ngoại Thất, Sơn Lót, Sơn Đặc Biệt)
+    - price: Giá (VNĐ)
+    - quantity: Số lượng tồn kho
+    - color_code: Mã màu hoặc tên màu
+    - specifications: Thông số kỹ thuật:
+        - finish: Bề mặt (Mờ, Mịn, Bóng Mờ, Bóng)
+        - coverage: Độ phủ
+        - dry_time: Thời gian khô
+        - base_type: Loại gốc (Gốc Nước, Gốc Dầu)
+    - tags: Từ khóa sản phẩm
+    - status: Trạng thái (đang_bán, hết_hàng, ngừng_kinh_doanh)
+    - unit: Đơn vị tính (Lít)
+
+    When parsing price values:
+    - Convert word numbers to numeric values (e.g., "bốn trăm nghìn" -> 400000, 400k -> 400000, 4tr -> 4.000.000)
+    - Handle price ranges (e.g., "từ 200 đến 500k" -> {"min": 200000, "max": 500000})
+    - Handle comparisons (e.g., "dưới 400k" -> {"operator": "<", "value": 400000})
+
+    Example Vietnamese query: "tìm sơn ngoại thất màu kem giá dưới 400 nghìn bề mặt bóng và gốc nước"
+    Example output:
+    {
+        "search_parameters": {
+            "category": "Sơn Ngoại Thất",
+            "color_code": "kem",
+            "price": {"operator": "<", "value": 400000},
+            "specifications": {
+                "finish": "bóng",
+                "base_type": "Gốc Nước"
             }
+        },
+        "sort_parameters": {
+            "field": "price",
+            "order": "asc"
         }
-        """
+    }
 
-        user_prompt = f"Parse this query and extract relevant search parameters: {user_message}"
+    REMEMBER: Return ONLY the JSON object, no other text."""
+
+        user_prompt = f"""Parse this Vietnamese query into the exact JSON format shown in the example. Query: "{user_message}"
+
+    IMPORTANT: Return ONLY the JSON object, no other text or explanation."""
 
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            MessageContent(role="assistant", content=system_prompt),
+            MessageContent(role="user", content=user_prompt)
         ]
 
         try:
             response = self.query(messages)
             
+            if not response or not response.strip():
+                return {
+                    "status": "error",
+                    "message": "Empty response from LLM",
+                    "parameters": {"title": user_message}
+                }
+
             try:
-                import json
-                parsed_result = json.loads(response)
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
+                cleaned_response = cleaned_response.strip()
                 
-                # Validate and clean the parsed parameters
+                parsed_result = json.loads(cleaned_response)
+                
                 if not isinstance(parsed_result, dict):
                     raise ValueError("Invalid response format")
 
+                # Extract search parameters
+                search_params = parsed_result.get("search_parameters", {})
+                
+                # Transform the parameters if needed to match SearchUtils expectations
+                transformed_params = search_params.copy()
+                
+                # Special handling for specifications
+                if "specifications" in transformed_params:
+                    specs = transformed_params["specifications"]
+                    # Ensure all spec values are strings
+                    transformed_params["specifications"] = {
+                        k: str(v) for k, v in specs.items()
+                    }
+
+                # Handle price formatting
+                if "price" in transformed_params:
+                    price_param = transformed_params["price"]
+                    if isinstance(price_param, dict):
+                        # Keep the existing format as SearchUtils can handle it
+                        pass
+                    else:
+                        # Convert simple price to exact match format
+                        transformed_params["price"] = {
+                            "operator": "=",
+                            "value": float(price_param)
+                        }
+
                 return {
                     "status": "success",
-                    "parameters": parsed_result
+                    "parameters": transformed_params,
+                    "sort": parsed_result.get("sort_parameters")
                 }
 
             except json.JSONDecodeError as e:
                 return {
                     "status": "error",
                     "message": f"Failed to parse LLM response as JSON: {str(e)}",
-                    "parameters": {"search_term": user_message}
+                    "parameters": {"title": user_message}
                 }
 
         except Exception as e:
             return {
                 "status": "error",
                 "message": f"Error parsing product query: {str(e)}",
-                "parameters": {"search_term": user_message}
+                "parameters": {"title": user_message}
             }

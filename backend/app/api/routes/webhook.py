@@ -39,7 +39,7 @@ async def create_webhook(
         
         # First store the raw webhook data
         webhook_data = webhook_service.process_webhook_payload(payload_json)
-        webhook = webhook_service.create_webhook(webhook_data)
+        webhook = await webhook_service.create_webhook(webhook_data)
         
         # Then process the Zalo event and handle any inventory actions
         result = await webhook_service.process_webhook(payload_json)
