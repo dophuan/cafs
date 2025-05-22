@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.api.services.conversation.chat import LLMService
 from app.api.services.webhook.base import BaseWebhookService
 from app.api.services.zalo.zalo_parser import ZaloParser
-from app.api.services.webhook.conversation import ConversationService
+from app.api.services.conversation.conversation import ConversationService
 from app.api.services.webhook.inventory import InventoryService
 
 # Configure logging

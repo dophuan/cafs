@@ -23,7 +23,9 @@ services:
     image: elasticsearch:8.12.0
     command: >
       bash -c '
-        bin/elasticsearch-plugin install --batch analysis-icu &&
+        if [ ! -d "/usr/share/elasticsearch/plugins/analysis-icu" ]; then
+          bin/elasticsearch-plugin install --batch analysis-icu
+        fi &&
         /usr/local/bin/docker-entrypoint.sh elasticsearch
       '
     environment:

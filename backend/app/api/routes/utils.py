@@ -9,7 +9,7 @@ from app.models.item import Item as DatabaseItem
 from app.api.deps import get_current_active_superuser, get_db
 from app.models.message import Message
 from app.utils import generate_test_email, send_email
-from app.api.services.webhook.elasticsearch_service import ElasticSearchService
+from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
 from app.api.services.webhook.inventory import InventoryService
 from app.core.config import settings
 

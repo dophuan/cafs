@@ -1,8 +1,7 @@
 import logging
 from typing import Dict, Any
-from app.api.services.webhook.search_utils import SearchUtils
+from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
 from app.api.services.conversation.chat import LLMService
-from app.api.services.webhook.elasticsearch_service import ElasticSearchService
 from app.models.search_params import SearchParams
 from sqlmodel import Session, select
 from app.core.config import settings
@@ -127,6 +126,7 @@ class InventoryService:
 
             # Convert parsed parameters to SearchParams using the new factory method
             search_params = SearchParams.from_parsed_params(parsed_params["parameters"])
+            print(f"====== Search params: {search_params}")
 
             # Perform search using Elasticsearch
             search_result = await self.es_service.search_products(search_params)
@@ -187,7 +187,6 @@ class InventoryService:
         try:
             # Add debug logging for query
             statement = select(Item)
-            logger.info(f"Executing query: {statement}")
             
             # Get items and log raw results
             items = self.db.exec(statement).all()

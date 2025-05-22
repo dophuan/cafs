@@ -1,27 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from typing import Dict, Any
 from pydantic import BaseModel
 
 from app.api.services.zalo.zalo_interaction import ZaloInteractionService
+from app.models.message import ConversationRequest, ConversationWithInventoryRequest, GroupMessageRequest
 
 router = APIRouter(prefix="/zalo", tags=["zalo"])
-
-# Pydantic models for request validation
-class GroupMessageRequest(BaseModel):
-    group_id: str
-    text: str
-
-class ConversationRequest(BaseModel):
-    group_id: str
-    response_text: str
-
-class InventoryActionRequest(BaseModel):
-    message: str
-    action: str
-
-class ConversationWithInventoryRequest(BaseModel):
-    conversation: ConversationRequest
-    inventory_action: InventoryActionRequest
 
 # Dependency to get service instance
 def get_zalo_service():
