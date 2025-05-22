@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.api.services.conversation.chat import LLMService
 from app.api.services.webhook.base import BaseWebhookService
 from app.api.services.zalo.zalo_parser import ZaloParser
-from app.api.services.webhook.conversation import ConversationService
+from app.api.services.conversation.conversation import ConversationService
 from app.api.services.webhook.inventory import InventoryService
 
 # Configure logging
@@ -57,7 +57,6 @@ class WebhookService:
     async def create_webhook(self, webhook_data: WebhookCreate) -> Webhook:
         """Create a new webhook entry"""
         try:
-            await self.inventory_handler.sync_products_to_elasticsearch()
             db_webhook = Webhook.from_orm(webhook_data)
             self.db.add(db_webhook)
             self.db.commit()

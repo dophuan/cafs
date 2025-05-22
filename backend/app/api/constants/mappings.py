@@ -72,6 +72,18 @@ ELASTICSEARCH_MAPPING = {
             },
             "status": {
                 "type": "keyword"
+            },
+            "quantity": {
+                "type": "integer"
+            },
+            "reorder_point": {
+                "type": "integer"
+            },
+            "sku": {
+                "type": "keyword"
+            },
+            "barcode": {
+                "type": "keyword"
             }
         }
     }

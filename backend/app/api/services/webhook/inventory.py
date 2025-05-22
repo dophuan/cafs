@@ -1,8 +1,7 @@
 import logging
-from typing import Dict, Any
-from app.api.services.webhook.search_utils import SearchUtils
+from typing import Dict, Any, List, Union
+from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
 from app.api.services.conversation.chat import LLMService
-from app.api.services.webhook.elasticsearch_service import ElasticSearchService
 from app.models.search_params import SearchParams
 from sqlmodel import Session, select
 from app.core.config import settings
@@ -43,21 +42,119 @@ class InventoryService:
             
         return await handler(intent.get("parameters", {}))
 
+    def _normalize_identifier(self, identifier: Union[str, List[str]]) -> Union[str, List[str]]:
+        """Normalize SKU or barcode to a consistent format"""
+        if isinstance(identifier, list):
+            return [str(id).strip().upper() for id in identifier]
+        return str(identifier).strip().upper()
+
+    def _build_stock_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Build Elasticsearch query based on parameters"""
+        query_types = {
+            "skus": lambda skus: {
+                "bool": {
+                    "should": [
+                        {"match": {"sku": sku}} for sku in self._normalize_identifier(skus)
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "sku": lambda sku: {
+                "match": {
+                    "sku": self._normalize_identifier(sku)
+                }
+            },
+            "barcodes": lambda barcodes: {
+                "bool": {
+                    "should": [
+                        {"match": {"barcode": barcode}} for barcode in self._normalize_identifier(barcodes)
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "barcode": lambda barcode: {
+                "match": {
+                    "barcode": self._normalize_identifier(barcode)
+                }
+            },
+            "product_name": lambda name: {
+                "match": {
+                    "title": {
+                        "query": name,
+                        "analyzer": "vietnamese_analyzer"
+                    }
+                }
+            }
+        }
+
+        # Get the first available query parameter and its value
+        query_param = next((k for k in query_types.keys() if params.get(k)), None)
+        
+        # Use the matching query builder or default to low stock query
+        query_builder = query_types.get(query_param, lambda _: {
+            "range": {
+                "quantity": {
+                    "lte": "reorder_point"
+                }
+            }
+        })
+
+        return {
+            "query": query_builder(params.get(query_param, [])),
+            "size": 100
+        }
+
+    def _format_stock_items(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Format Elasticsearch hits into stock items"""
+        formatted_items = []
+        for hit in hits:
+            source = hit['_source']
+            quantity = int(source.get('quantity', 0))
+            reorder_point = int(source.get('reorder_point', 0))
+
+            stock_status = "Còn hàng"
+            if quantity == 0:
+                stock_status = "Hết hàng"
+            elif quantity <= reorder_point:
+                stock_status = "Sắp hết hàng"
+
+            formatted_items.append({
+                "title": source.get('title', ''),
+                "quantity": quantity,
+                "status": stock_status,
+                "reorder_point": reorder_point,
+                "price": f"{float(source.get('price', 0)):,.0f} VND",
+                "sku": source.get('sku', '')
+            })
+        return formatted_items
+
+    def _build_stock_message(self, items: List[Dict[str, Any]]) -> str:
+        """Build response message from formatted items"""
+        message = f"Thông tin tồn kho:\n\n"
+        for item in items:
+            message += f"- {item['title']}:\n"
+            message += f"  Số lượng: {item['quantity']}\n"
+            message += f"  Trạng thái: {item['status']}\n"
+            message += f"  Giá: {item['price']}\n"
+            message += f"  SKU: {item['sku']}\n"
+        return message
+
     async def check_stock(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info(f"Checking stock with params: {params}")
         try:
-            statement = select(Item)
+            query = self._build_stock_query(params)
+            logger.info(f"Executing query: {query}")
             
-            if params.get("sku"):
-                statement = statement.where(Item.sku == params["sku"])
-            elif params.get("product_name"):
-                statement = statement.where(Item.title.ilike(f"%{params['product_name']}%"))
-            else:
-                # Check for low stock products
-                statement = statement.where(Item.quantity <= Item.reorder_point)
-                
-            items = self.db.exec(statement).all()
+            response = self.es_service.client.search(
+                index=self.es_service.index_name,
+                body=query
+            )
+            logger.info(f"Search response: {response}")
+
+            hits = response.get('hits', {}).get('hits', [])
+            logger.info(f"Found {len(hits)} hits")
             
-            if not items:
+            if not hits:
                 return {
                     "action": "check_stock",
                     "status": "success",
@@ -65,28 +162,8 @@ class InventoryService:
                     "items": []
                 }
 
-            formatted_items = []
-            for item in items:
-                stock_status = "Còn hàng"
-                if item.quantity == 0:
-                    stock_status = "Hết hàng"
-                elif item.quantity <= item.reorder_point:
-                    stock_status = "Sắp hết hàng"
-
-                formatted_items.append({
-                    "title": item.title,
-                    "quantity": item.quantity,
-                    "status": stock_status,
-                    "reorder_point": item.reorder_point,
-                    "price": f"{item.price:,.0f} VND"
-                })
-
-            message = f"Thông tin tồn kho:\n\n"
-            for item in formatted_items:
-                message += f"- {item['title']}:\n"
-                message += f"  Số lượng: {item['quantity']}\n"
-                message += f"  Trạng thái: {item['status']}\n"
-                message += f"  Giá: {item['price']}\n"
+            formatted_items = self._format_stock_items(hits)
+            message = self._build_stock_message(formatted_items)
 
             return {
                 "action": "check_stock",
@@ -96,6 +173,7 @@ class InventoryService:
             }
 
         except Exception as e:
+            logger.error(f"Error checking stock: {str(e)}", exc_info=True)
             return {
                 "action": "check_stock",
                 "status": "error",
@@ -127,6 +205,7 @@ class InventoryService:
 
             # Convert parsed parameters to SearchParams using the new factory method
             search_params = SearchParams.from_parsed_params(parsed_params["parameters"])
+            print(f"====== Search params: {search_params}")
 
             # Perform search using Elasticsearch
             search_result = await self.es_service.search_products(search_params)
@@ -187,11 +266,9 @@ class InventoryService:
         try:
             # Add debug logging for query
             statement = select(Item)
-            logger.info(f"Executing query: {statement}")
             
             # Get items and log raw results
             items = self.db.exec(statement).all()
-            logger.info(f"Raw database result: {items}")
             logger.info(f"Found {len(items)} items in database")
             
             if not items:

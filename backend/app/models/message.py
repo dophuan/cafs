@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, List, Union
 
+from pydantic import BaseModel, validator
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
@@ -25,3 +26,36 @@ class LLMConversation(SQLModel, table=True):
     meta_data: dict[str, Any] | None = Field(
         sa_column=Column("metadata", JSONB, nullable=True)
     )
+
+class MessageContent(BaseModel):
+    role: str
+    content: str
+
+    @validator("role")
+    def validate_role(cls, v: str) -> str:
+        if v not in ["user", "assistant"]:
+            raise ValueError('Role must be either "user" or "assistant"')
+        return v
+
+class ChatRequest(BaseModel):
+    user_message: Union[str, List[MessageContent]]
+
+class ChatResponse(BaseModel):
+    bot_response: str
+    conversation_id: str | None = None
+
+class ConversationRequest(BaseModel):
+    group_id: str
+    response_text: str
+
+class GroupMessageRequest(BaseModel):
+    group_id: str
+    text: str
+
+class InventoryActionRequest(BaseModel):
+    message: str
+    action: str
+
+class ConversationWithInventoryRequest(BaseModel):
+    conversation: ConversationRequest
+    inventory_action: InventoryActionRequest

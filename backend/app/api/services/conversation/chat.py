@@ -6,7 +6,6 @@ from typing import Any, Union, List, Dict
 
 import requests
 from fastapi import HTTPException, status
-from pydantic import BaseModel, validator
 from sqlalchemy import (
     Column,
     MetaData,
@@ -20,33 +19,10 @@ from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
 from openai import OpenAI
 
-from app.models.message import LLMConversation
+from app.models.message import LLMConversation, MessageContent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class MessageContent(BaseModel):
-    role: str
-    content: str
-
-    @validator("role")
-    def validate_role(cls, v: str) -> str:
-        if v not in ["user", "assistant"]:
-            raise ValueError('Role must be either "user" or "assistant"')
-        return v
-
-class ChatRequest(BaseModel):
-    user_message: Union[str, List[MessageContent]]
-
-class ChatResponse(BaseModel):
-    bot_response: str
-    conversation_id: str | None = None
-
-class ConversationRequest(BaseModel):
-    conversation_id: str | None = None
-    conversation_name: str | None = None
-    user_message: str
-    bot_response: str
 
 class LLMService:
     def __init__(
@@ -128,7 +104,6 @@ class LLMService:
                 detail=f"Chat API request failed: {str(e)}"
             )
 
-    # Rest of the methods remain unchanged
     def list_conversations(
         self, page: int | None = None, page_size: int | None = None
     ) -> dict[str, Any]:
