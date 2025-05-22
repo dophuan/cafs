@@ -7,6 +7,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.api.deps import get_db
+from app.api.services.webhook.inventory import InventoryService
 
 # Configure logging
 logging.basicConfig(
@@ -71,6 +73,15 @@ async def startup_event():
     logger.info(f"Starting {settings.PROJECT_NAME} API")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"API Version: {settings.API_V1_STR}")
+    
+    # Initialize Elasticsearch sync
+    try:
+        db = next(get_db())
+        inventory_service = InventoryService(db)
+        await inventory_service.sync_products_to_elasticsearch()
+        logger.info("Successfully synchronized products to Elasticsearch")
+    except Exception as e:
+        logger.error(f"Failed to sync products to Elasticsearch: {str(e)}")
 
 # Shutdown event handler
 @app.on_event("shutdown")

@@ -35,6 +35,8 @@ class ConversationService:
             - SEARCH_PRODUCTS
             - NORMAL_CONVERSATION
             You may be called as ["ad", "admin", "ác min", "bot", "Trident"]
+
+            sku will start with "PNT", barcode will start with "BAR"
             
             Return JSON with identified intent and relevant parameters."""
 
