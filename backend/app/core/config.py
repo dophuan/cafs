@@ -74,7 +74,7 @@ class Settings(BaseSettings):
                 password=self.POSTGRES_PASSWORD,
                 host=self.POSTGRES_SERVER,
                 port=self.POSTGRES_PORT,
-                path=f"/{self.POSTGRES_DB}",
+                path=self.POSTGRES_DB,
             )
         return MultiHostUrl.build(
             scheme="postgresql+psycopg",
