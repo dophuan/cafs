@@ -8,6 +8,7 @@ from app.utils import get_llm_service
 
 router = APIRouter()
 
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     request: ChatRequest,
@@ -20,7 +21,11 @@ async def chat_endpoint(
         llm_service = await get_llm_service(session, current_user)
 
         # Get the user message
-        user_message = request.user_message if isinstance(request.user_message, str) else request.user_message[-1].content
+        user_message = (
+            request.user_message
+            if isinstance(request.user_message, str)
+            else request.user_message[-1].content
+        )
         if not user_message:
             raise HTTPException(status_code=400, detail="User message is required")
 
@@ -47,8 +52,7 @@ async def chat_endpoint(
     except Exception as e:
         print(f"Error in chat_endpoint: {str(e)}")  # Add this debug line
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 

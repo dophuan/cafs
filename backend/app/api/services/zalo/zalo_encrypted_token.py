@@ -20,7 +20,7 @@ class EncryptedFileTokenStorage:
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to initialize encrypted storage: {str(e)}"
+                detail=f"Failed to initialize encrypted storage: {str(e)}",
             )
 
     def _is_valid_key(self, key: bytes) -> bool:
@@ -30,17 +30,19 @@ class EncryptedFileTokenStorage:
         except Exception:
             return False
 
-    def store_tokens(self, access_token: str, refresh_token: str, expiry: datetime) -> None:
+    def store_tokens(
+        self, access_token: str, refresh_token: str, expiry: datetime
+    ) -> None:
         try:
             data = {
                 "access_token": access_token,
                 "refresh_token": refresh_token,
-                "expiry": expiry.isoformat()
+                "expiry": expiry.isoformat(),
             }
             encrypted_data = self.cipher_suite.encrypt(json.dumps(data).encode())
 
             temp_file = f"{self.file_path}.tmp"
-            with open(temp_file, 'wb') as file:
+            with open(temp_file, "wb") as file:
                 file.write(encrypted_data)
 
             os.replace(temp_file, self.file_path)
@@ -48,7 +50,7 @@ class EncryptedFileTokenStorage:
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to store tokens: {str(e)}"
+                detail=f"Failed to store tokens: {str(e)}",
             )
 
     def get_tokens(self) -> tuple[str | None, str | None, datetime | None]:
@@ -56,7 +58,7 @@ class EncryptedFileTokenStorage:
             if not os.path.exists(self.file_path):
                 return None, None, None
 
-            with open(self.file_path, 'rb') as file:
+            with open(self.file_path, "rb") as file:
                 encrypted_data = file.read()
 
             try:
@@ -64,7 +66,9 @@ class EncryptedFileTokenStorage:
                 return (
                     decrypted_data.get("access_token"),
                     decrypted_data.get("refresh_token"),
-                    datetime.fromisoformat(decrypted_data["expiry"]) if "expiry" in decrypted_data else None
+                    datetime.fromisoformat(decrypted_data["expiry"])
+                    if "expiry" in decrypted_data
+                    else None,
                 )
             except InvalidToken:
                 self.clear_token()
@@ -96,5 +100,5 @@ class EncryptedFileTokenStorage:
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to rotate encryption key: {str(e)}"
+                detail=f"Failed to rotate encryption key: {str(e)}",
             )

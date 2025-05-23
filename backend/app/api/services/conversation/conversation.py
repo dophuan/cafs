@@ -10,18 +10,16 @@ from app.models.zalo import ZaloConversation, ZaloConversationCreate
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 class ConversationService:
     def __init__(self, db: Session, llm_service: LLMService | None = None):
         self.db = db
         self.llm_service = llm_service or LLMService(
-            db=db,
-            api_key=settings.OPENAI_API_KEY,
-            engine=settings.OPENAI_ENGINE
+            db=db, api_key=settings.OPENAI_API_KEY, engine=settings.OPENAI_ENGINE
         )
 
     async def analyze_intent(self, message: str) -> dict[str, Any]:
@@ -44,21 +42,19 @@ class ConversationService:
 
             messages = [
                 MessageContent(role="assistant", content=system_prompt),
-                MessageContent(role="user", content=message)
+                MessageContent(role="user", content=message),
             ]
 
             response = self.llm_service.query(messages)
 
             # Clean the response by removing markdown formatting
-            cleaned_response = response.replace("```json", "").replace("```", "").strip()
+            cleaned_response = (
+                response.replace("```json", "").replace("```", "").strip()
+            )
             return json.loads(cleaned_response)
         except Exception as e:
             logger.error(f"Raise error while processing conversation: {str(e)}")
-            return {
-                "intent": None,
-                "parameters": {},
-                "error": str(e)
-            }
+            return {"intent": None, "parameters": {}, "error": str(e)}
 
     async def store_conversation(self, data: dict[str, Any]) -> ZaloConversation:
         conversation = ZaloConversationCreate(**data)
@@ -77,15 +73,13 @@ class ConversationService:
 
         messages = [
             MessageContent(role="assistant", content=system_prompt),
-            MessageContent(role="user", content=message)
+            MessageContent(role="user", content=message),
         ]
 
         return self.llm_service.query(messages)
 
     async def process_conversation(
-        self,
-        event_type: str,
-        parsed_data: dict[str, Any]
+        self, event_type: str, parsed_data: dict[str, Any]
     ) -> dict[str, Any]:
         response_text = None
 
@@ -96,7 +90,9 @@ class ConversationService:
 
             # Generate response for normal conversation
             if intent.get("intent") == "NORMAL_CONVERSATION":
-                response_text = await self.handle_normal_conversation(parsed_data["message_text"])
+                response_text = await self.handle_normal_conversation(
+                    parsed_data["message_text"]
+                )
 
         # Store conversation
         conversation = await self.store_conversation(parsed_data)
@@ -106,5 +102,5 @@ class ConversationService:
             "intent": parsed_data.get("llm_analysis", {}),
             "parsed_data": parsed_data,
             "response_text": response_text,
-            "group_id": parsed_data.get("group_id")
+            "group_id": parsed_data.get("group_id"),
         }

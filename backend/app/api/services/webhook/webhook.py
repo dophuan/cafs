@@ -22,18 +22,16 @@ from app.models.webhook import Webhook, WebhookCreate
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 class WebhookService:
     def __init__(self, db: Session, llm_service: LLMService | None = None):
         self.db = db
         self.llm_service = llm_service or LLMService(
-            db=db,
-            api_key=settings.OPENAI_API_KEY,
-            engine=settings.OPENAI_ENGINE
+            db=db, api_key=settings.OPENAI_API_KEY, engine=settings.OPENAI_ENGINE
         )
         # Initialize utilities
         self.base_handler = BaseWebhookService(db)
@@ -48,9 +46,7 @@ class WebhookService:
             return True
 
         expected_signature = hmac.new(
-            settings.WEBHOOK_SECRET_KEY.encode(),
-            payload,
-            hashlib.sha256
+            settings.WEBHOOK_SECRET_KEY.encode(), payload, hashlib.sha256
         ).hexdigest()
 
         logger.info(f"Received signature: {signature}")
@@ -69,10 +65,7 @@ class WebhookService:
             return db_webhook
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Database error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     def get_webhooks(self, skip: int = 0, limit: int = 100) -> list[Webhook]:
         """Get list of webhooks with pagination"""
@@ -99,16 +92,14 @@ class WebhookService:
     def process_webhook_payload(self, payload_json: dict) -> WebhookCreate:
         """Process and validate webhook payload"""
         try:
-            event_type = payload_json.get("event_name") or payload_json.get("event_type", "unknown")
-
-            return WebhookCreate(
-                event_type=event_type,
-                payload=payload_json
+            event_type = payload_json.get("event_name") or payload_json.get(
+                "event_type", "unknown"
             )
+
+            return WebhookCreate(event_type=event_type, payload=payload_json)
         except ValueError as e:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid payload format: {str(e)}"
+                status_code=400, detail=f"Invalid payload format: {str(e)}"
             )
 
     async def process_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -119,31 +110,35 @@ class WebhookService:
 
             # 2. Store conversation and get intent analysis
             conversation_result = await self.conversation_handler.process_conversation(
-                event_type,
-                parsed_data
+                event_type, parsed_data
             )
 
             result = {
                 "status": "success",
                 "conversation_id": conversation_result.get("conversation_id"),
-                "event_type": event_type
+                "event_type": event_type,
             }
 
             final_intent = conversation_result.get("intent")
             if final_intent:
-                final_intent["parameters"]["query"] = payload.get("message", {}).get("text")
+                final_intent["parameters"]["query"] = payload.get("message", {}).get(
+                    "text"
+                )
             intent_type = final_intent.get("intent") if final_intent else None
 
             # Handle normal conversation response
             if intent_type == NORMAL_CONVERSATION:
-                zalo_result = await self.zalo_service.handle_normal_conversation(conversation_result)
+                zalo_result = await self.zalo_service.handle_normal_conversation(
+                    conversation_result
+                )
                 result.update(zalo_result)
 
             elif intent_type in [CHECK_STOCK_LEVELS, SEARCH_PRODUCTS]:
-                inventory_action = await self.inventory_handler.handle_inventory_action(final_intent)
+                inventory_action = await self.inventory_handler.handle_inventory_action(
+                    final_intent
+                )
                 zalo_result = await self.zalo_service.handle_inventory_response(
-                    conversation_result,
-                    inventory_action
+                    conversation_result, inventory_action
                 )
                 result.update(zalo_result)
                 result["inventory_action"] = inventory_action
@@ -160,6 +155,5 @@ class WebhookService:
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}")
             raise HTTPException(
-                status_code=500,
-                detail=f"Error processing webhook: {str(e)}"
+                status_code=500, detail=f"Error processing webhook: {str(e)}"
             )

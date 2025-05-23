@@ -11,6 +11,7 @@ from sqlmodel import Field, SQLModel
 class Message(SQLModel):
     message: str
 
+
 class LLMConversation(SQLModel, table=True):
     __tablename__ = "llm_conversations"
 
@@ -27,6 +28,7 @@ class LLMConversation(SQLModel, table=True):
         sa_column=Column("metadata", JSONB, nullable=True)
     )
 
+
 class MessageContent(BaseModel):
     role: str
     content: str
@@ -37,24 +39,30 @@ class MessageContent(BaseModel):
             raise ValueError('Role must be either "user" or "assistant"')
         return v
 
+
 class ChatRequest(BaseModel):
     user_message: str | list[MessageContent]
+
 
 class ChatResponse(BaseModel):
     bot_response: str
     conversation_id: str | None = None
 
+
 class ConversationRequest(BaseModel):
     group_id: str
     response_text: str
+
 
 class GroupMessageRequest(BaseModel):
     group_id: str
     text: str
 
+
 class InventoryActionRequest(BaseModel):
     message: str
     action: str
+
 
 class ConversationWithInventoryRequest(BaseModel):
     conversation: ConversationRequest

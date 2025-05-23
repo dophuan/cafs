@@ -58,8 +58,10 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
         )
     return current_user
 
+
 async def get_webhook_service(db: Session = Depends(get_db)) -> WebhookService:
     service = WebhookService(db)
     return service
+
 
 WebhookServiceDep = Annotated[WebhookService, Depends(get_webhook_service)]

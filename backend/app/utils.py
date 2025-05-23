@@ -124,6 +124,7 @@ def verify_password_reset_token(token: str) -> str | None:
     except InvalidTokenError:
         return None
 
+
 async def get_llm_service(session: SessionDep, current_user: CurrentUser):
     api_key = settings.OPENAI_API_KEY
     local_endpoint = settings.LOCAL_LLM_ENDPOINT
@@ -134,5 +135,5 @@ async def get_llm_service(session: SessionDep, current_user: CurrentUser):
         user_id=str(current_user.id),
         api_key=str(api_key) if api_key else "",
         engine=str(engine) if engine else "",
-        local_endpoint=local_endpoint
+        local_endpoint=local_endpoint,
     )

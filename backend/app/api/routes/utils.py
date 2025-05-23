@@ -16,6 +16,7 @@ router = APIRouter(prefix="/utils", tags=["utils"])
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @router.post(
     "/test-email/",
     dependencies=[Depends(get_current_active_superuser)],
@@ -38,17 +39,18 @@ def test_email(email_to: EmailStr) -> Message:
 async def health_check() -> bool:
     return True
 
+
 @router.post("/reindex")
 async def reindex_products(db: Session = Depends(get_db)):
     engine = db.get_bind()
     # Get the URL components directly
     url_dict = {
-        'drivername': engine.url.drivername,
-        'username': engine.url.username,
-        'password': engine.url.password,
-        'host': engine.url.host,
-        'port': engine.url.port,
-        'database': engine.url.database
+        "drivername": engine.url.drivername,
+        "username": engine.url.username,
+        "password": engine.url.password,
+        "host": engine.url.host,
+        "port": engine.url.port,
+        "database": engine.url.database,
     }
     logger.info(f"Full database URL: {url_dict}")
 
@@ -62,8 +64,4 @@ async def reindex_products(db: Session = Depends(get_db)):
     await es_service.setup_index()
     result = await es_service.index_products([item.dict() for item in items])
 
-    return {
-        "status": "success",
-        "indexed": len(items),
-        "result": result
-    }
+    return {"status": "success", "indexed": len(items), "result": result}

@@ -17,9 +17,7 @@ class BaseWebhookService:
             return True
 
         expected_signature = hmac.new(
-            settings.WEBHOOK_SECRET_KEY.encode(),
-            payload,
-            hashlib.sha256
+            settings.WEBHOOK_SECRET_KEY.encode(), payload, hashlib.sha256
         ).hexdigest()
 
         return expected_signature == signature
@@ -33,7 +31,4 @@ class BaseWebhookService:
             return db_webhook
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Database error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

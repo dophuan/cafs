@@ -4,4 +4,4 @@ set -e
 set -x
 
 ruff check --fix app
-ruff format app --check
+ruff format app

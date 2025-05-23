@@ -22,17 +22,20 @@ class ZaloConversationBase(SQLModel):
     llm_analysis: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     raw_payload: dict[str, Any] = Field(sa_column=Column(JSONB))
 
+
 class ZaloConversation(ZaloConversationBase, table=True):
     __tablename__ = "zalo_conversations"
 
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
     )
+
 
 class ZaloConversationCreate(ZaloConversationBase):
     pass
+
 
 class ZaloConversationRead(ZaloConversationBase):
     id: int

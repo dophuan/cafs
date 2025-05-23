@@ -12,15 +12,16 @@ webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])
 webhook_private = APIRouter(
     prefix="/webhook-history",
     tags=["webhooks"],
-    dependencies=[Depends(deps.get_current_active_superuser)]
+    dependencies=[Depends(deps.get_current_active_superuser)],
 )
+
 
 @webhook_public.post("/")
 async def create_webhook(
     *,
     request: Request,
     webhook_service: WebhookService = Depends(deps.get_webhook_service),
-    x_webhook_signature: str = Header(None)
+    x_webhook_signature: str = Header(None),
 ) -> Response:
     """
     Receive webhook events - public endpoint
@@ -30,10 +31,7 @@ async def create_webhook(
     if x_webhook_signature and not webhook_service.verify_signature(
         payload, x_webhook_signature
     ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid webhook signature"
-        )
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     try:
         payload_json = await request.json()
@@ -46,18 +44,14 @@ async def create_webhook(
         result = await webhook_service.process_webhook(payload_json)
 
         return JSONResponse(
-            content={
-                "status": "success",
-                "webhook_id": webhook.id,
-                "result": result
-            }
+            content={"status": "success", "webhook_id": webhook.id, "result": result}
         )
 
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Error create processing webhook: {str(e)}"
+            status_code=500, detail=f"Error create processing webhook: {str(e)}"
         )
+
 
 @webhook_private.get("/", response_model=list[WebhookRead])
 def read_webhooks(
@@ -70,6 +64,7 @@ def read_webhooks(
     """
     return webhook_service.get_webhooks(skip=skip, limit=limit)
 
+
 @webhook_private.get("/event/{event_type}", response_model=list[WebhookRead])
 def read_webhooks_by_event(
     event_type: str,
@@ -81,10 +76,9 @@ def read_webhooks_by_event(
     Retrieve webhooks filtered by event type
     """
     return webhook_service.get_webhooks_by_event_type(
-        event_type=event_type,
-        skip=skip,
-        limit=limit
+        event_type=event_type, skip=skip, limit=limit
     )
+
 
 @webhook_private.get("/{webhook_id}", response_model=WebhookRead)
 def read_webhook(
@@ -98,6 +92,7 @@ def read_webhook(
     if not webhook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     return webhook
+
 
 # Export both routers
 router = APIRouter()

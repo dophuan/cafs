@@ -35,8 +35,9 @@ class SearchParams:
             color=parsed_params.get("color_code"),
             price_range=price_range if price_range else None,
             specifications=parsed_params.get("specifications"),
-            status=parsed_params.get("status")
+            status=parsed_params.get("status"),
         )
+
 
 @dataclass
 class SearchResult:
