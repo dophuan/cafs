@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from decimal import Decimal
+from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Integer, Numeric, String, text
+from sqlalchemy import Float, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
+from app.db.custom_types import VECTOR
 
 if TYPE_CHECKING:
     from .user import User
@@ -63,7 +65,7 @@ class Item(SQLModel, table=True):
     category: str | None = Field(
         default=None, sa_column=Column(String(100), index=True)
     )
-    price: float | None = Field(default=None, sa_column=Column(Numeric(10, 2)))
+    price: float | None = Field(default=None, sa_column=Column(Float))
     quantity: int | None = Field(default=None, sa_column=Column(Integer))
     dimensions: dict | None = Field(default=None, sa_column=Column(JSONB))
     color_code: str | None = Field(
@@ -88,10 +90,18 @@ class Item(SQLModel, table=True):
         )
     )
     owner: Optional["User"] = Relationship(back_populates="items")
+    embedding: Optional[List[float]] = Field(
+        default=None,
+        sa_column=Column(VECTOR(1536))
+    )
 
     class Config:
         arbitrary_types_allowed = True
-        json_encoders = {datetime: lambda v: v.isoformat()}
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            Decimal: lambda v: int(float(v)),
+            UUID: lambda v: str(v)
+        }
 
 
 class ItemPublic(ItemBase):

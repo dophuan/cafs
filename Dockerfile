@@ -24,22 +24,12 @@ RUN uv pip install --system . && \
 # Copy the rest of the application
 COPY ./backend /app
 
+# Copy the .env file into the working directory
+COPY .env /app/.env
+
 # Copy the Zalo verification file to a static directory
 RUN mkdir -p /app/static
 COPY zalo_verifierE8_WTUc2QoyViSuAciPh2tEnv1MVnp98DZ8t.html /app/static/
-
-# Set environment variables
-ENV PORT=8080
-ENV HOST=0.0.0.0
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-
-# Add default values for required settings
-ENV PROJECT_NAME="Webhook Service"
-ENV API_V1_STR="/api/v1"
-ENV ENVIRONMENT="production"
-ENV SENTRY_DSN=""
-ENV CORS_ORIGINS="*"
 
 # Create directory for Cloud SQL Unix socket
 RUN mkdir -p /cloudsql

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str = ""
-    POSTGRES_DB: str = "chaining_agent"
+    POSTGRES_DB: str = "postgres"
 
     @computed_field  # type: ignore[prop-decorator]
     @property

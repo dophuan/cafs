@@ -1,16 +1,25 @@
 from sqlmodel import Session, create_engine, select
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 from app import crud
 from app.core.config import settings
 from app.models.user import User, UserCreate
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+engine = create_engine(
+    str(settings.SQLALCHEMY_DATABASE_URI),
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30
+)
+
 print(f"----- DATABASE URI: {settings.SQLALCHEMY_DATABASE_URI} -----")
 
-# make sure all SQLModel models are imported (app.models) before initializing DB
-# otherwise, SQLModel might fail to initialize relationships properly
-# for more details: https://github.com/fastapi/full-stack-fastapi-template/issues/28
-
+@event.listens_for(Engine, "connect")
+def connect(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    cursor.close()
 
 def init_db(session: Session) -> None:
     # Tables should be created with Alembic migrations

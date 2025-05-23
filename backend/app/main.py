@@ -89,10 +89,10 @@ async def startup_event():
     try:
         db = next(get_db())
         inventory_service = InventoryService(db)
-        await inventory_service.sync_products_to_elasticsearch()
+        await inventory_service.sync_products_embeddings()
         logger.info("Successfully synchronized products to Elasticsearch")
     except Exception as e:
-        logger.error(f"Failed to sync products to Elasticsearch: {str(e)}")
+        logger.error(f"Failed to sync products to pgvector: {str(e)}")
 
 
 # Shutdown event handler
