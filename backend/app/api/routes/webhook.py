@@ -1,10 +1,11 @@
-from typing import List, Any
-from app.api.services.webhook.webhook import WebhookService
-from fastapi import APIRouter, Depends, HTTPException, Request, Header, Response
+from typing import Any
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from app.models.webhook import WebhookRead
 from app.api import deps
+from app.api.services.webhook.webhook import WebhookService
+from app.models.webhook import WebhookRead
 
 # Create two separate routers
 webhook_public = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -25,7 +26,7 @@ async def create_webhook(
     Receive webhook events - public endpoint
     """
     payload = await request.body()
-    
+
     if x_webhook_signature and not webhook_service.verify_signature(
         payload, x_webhook_signature
     ):
@@ -33,17 +34,17 @@ async def create_webhook(
             status_code=401,
             detail="Invalid webhook signature"
         )
-    
+
     try:
         payload_json = await request.json()
-        
+
         # First store the raw webhook data
         webhook_data = webhook_service.process_webhook_payload(payload_json)
         webhook = await webhook_service.create_webhook(webhook_data)
-        
+
         # Then process the Zalo event and handle any inventory actions
         result = await webhook_service.process_webhook(payload_json)
-        
+
         return JSONResponse(
             content={
                 "status": "success",
@@ -51,14 +52,14 @@ async def create_webhook(
                 "result": result
             }
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error create processing webhook: {str(e)}"
         )
 
-@webhook_private.get("/", response_model=List[WebhookRead])
+@webhook_private.get("/", response_model=list[WebhookRead])
 def read_webhooks(
     skip: int = 0,
     limit: int = 100,
@@ -69,7 +70,7 @@ def read_webhooks(
     """
     return webhook_service.get_webhooks(skip=skip, limit=limit)
 
-@webhook_private.get("/event/{event_type}", response_model=List[WebhookRead])
+@webhook_private.get("/event/{event_type}", response_model=list[WebhookRead])
 def read_webhooks_by_event(
     event_type: str,
     skip: int = 0,

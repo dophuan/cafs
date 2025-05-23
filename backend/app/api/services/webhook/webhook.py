@@ -1,19 +1,24 @@
-from typing import List, Optional, Dict, Any
-from app.api.services.zalo.zalo_interaction import ZaloInteractionService
-from app.api.constants.actions import CHECK_STOCK_LEVELS, NORMAL_CONVERSATION, SEARCH_PRODUCTS
-from sqlmodel import Session, select
-from fastapi import HTTPException
-import hmac
 import hashlib
+import hmac
 import logging
+from typing import Any
 
-from app.models.webhook import Webhook, WebhookCreate
-from app.core.config import settings
+from fastapi import HTTPException
+from sqlmodel import Session, select
+
+from app.api.constants.actions import (
+    CHECK_STOCK_LEVELS,
+    NORMAL_CONVERSATION,
+    SEARCH_PRODUCTS,
+)
 from app.api.services.conversation.chat import LLMService
-from app.api.services.webhook.base import BaseWebhookService
-from app.api.services.zalo.zalo_parser import ZaloParser
 from app.api.services.conversation.conversation import ConversationService
+from app.api.services.webhook.base import BaseWebhookService
 from app.api.services.webhook.inventory import InventoryService
+from app.api.services.zalo.zalo_interaction import ZaloInteractionService
+from app.api.services.zalo.zalo_parser import ZaloParser
+from app.core.config import settings
+from app.models.webhook import Webhook, WebhookCreate
 
 # Configure logging
 logging.basicConfig(
@@ -41,7 +46,7 @@ class WebhookService:
         """Verify webhook signature using HMAC"""
         if not settings.WEBHOOK_SECRET_KEY:
             return True
-        
+
         expected_signature = hmac.new(
             settings.WEBHOOK_SECRET_KEY.encode(),
             payload,
@@ -51,7 +56,7 @@ class WebhookService:
         logger.info(f"Received signature: {signature}")
         logger.info(f"Expected signature: {expected_signature}")
         logger.info(f"Payload: {payload.decode()}")
-        
+
         return expected_signature == signature
 
     async def create_webhook(self, webhook_data: WebhookCreate) -> Webhook:
@@ -69,19 +74,19 @@ class WebhookService:
                 detail=f"Database error: {str(e)}"
             )
 
-    def get_webhooks(self, skip: int = 0, limit: int = 100) -> List[Webhook]:
+    def get_webhooks(self, skip: int = 0, limit: int = 100) -> list[Webhook]:
         """Get list of webhooks with pagination"""
         statement = select(Webhook).offset(skip).limit(limit)
         return self.db.exec(statement).all()
 
-    def get_webhook_by_id(self, webhook_id: int) -> Optional[Webhook]:
+    def get_webhook_by_id(self, webhook_id: int) -> Webhook | None:
         """Get a specific webhook by ID"""
         statement = select(Webhook).where(Webhook.id == webhook_id)
         return self.db.exec(statement).first()
 
     def get_webhooks_by_event_type(
         self, event_type: str, skip: int = 0, limit: int = 100
-    ) -> List[Webhook]:
+    ) -> list[Webhook]:
         """Get webhooks filtered by event type"""
         statement = (
             select(Webhook)
@@ -95,7 +100,7 @@ class WebhookService:
         """Process and validate webhook payload"""
         try:
             event_type = payload_json.get("event_name") or payload_json.get("event_type", "unknown")
-            
+
             return WebhookCreate(
                 event_type=event_type,
                 payload=payload_json
@@ -106,12 +111,12 @@ class WebhookService:
                 detail=f"Invalid payload format: {str(e)}"
             )
 
-    async def process_webhook(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Main webhook processing method using utilities"""
         try:
             # 1. Parse Zalo message
             event_type, parsed_data = self.zalo_parser.parse_message(payload)
-            
+
             # 2. Store conversation and get intent analysis
             conversation_result = await self.conversation_handler.process_conversation(
                 event_type,
@@ -142,7 +147,7 @@ class WebhookService:
                 )
                 result.update(zalo_result)
                 result["inventory_action"] = inventory_action
-            
+
             # Handle inventory actions
             elif final_intent:
                 inventory_action = await self.inventory_handler.handle_inventory_action(

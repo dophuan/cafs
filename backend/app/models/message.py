@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any, List, Union
+from typing import Any
 
 from pydantic import BaseModel, validator
 from sqlalchemy import Column
@@ -38,7 +38,7 @@ class MessageContent(BaseModel):
         return v
 
 class ChatRequest(BaseModel):
-    user_message: Union[str, List[MessageContent]]
+    user_message: str | list[MessageContent]
 
 class ChatResponse(BaseModel):
     bot_response: str

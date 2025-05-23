@@ -2,10 +2,11 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Union, List, Dict
+from typing import Any
 
 import requests
 from fastapi import HTTPException, status
+from openai import OpenAI
 from sqlalchemy import (
     Column,
     MetaData,
@@ -17,7 +18,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
-from openai import OpenAI
 
 from app.models.message import LLMConversation, MessageContent
 
@@ -39,8 +39,8 @@ class LLMService:
         self.engine = engine
         self.local_endpoint = local_endpoint
 
-    def query(self, prompt: Union[str, List[MessageContent]]) -> str:
-        try:            
+    def query(self, prompt: str | list[MessageContent]) -> str:
+        try:
             messages = []
             if isinstance(prompt, str):
                 messages = [{"role": "user", "content": prompt}]
@@ -69,7 +69,7 @@ class LLMService:
                 headers = {
                     "Content-Type": "application/json"
                 }
-                
+
                 payload = {
                     "model": "mistral-7b-instruct-v0.2",
                     "messages": messages,
@@ -84,10 +84,10 @@ class LLMService:
                     json=payload,
                     timeout=30
                 )
-                
+
                 response.raise_for_status()
                 json_response = response.json()
-                
+
                 if "choices" in json_response and len(json_response["choices"]) > 0:
                     return str(json_response["choices"][0]["message"]["content"]).strip()
                 return ""
@@ -96,7 +96,7 @@ class LLMService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="No LLM service available"
             )
-                    
+
         except requests.RequestException as e:
             logger.info(f"Error connecting to LLM: {str(e)}")
             raise HTTPException(
@@ -234,7 +234,7 @@ class LLMService:
                 detail=f"Failed to delete conversation: {str(e)}",
             )
 
-    def get_chat_history(self, conversation_id: str) -> List[Dict[str, str]]:
+    def get_chat_history(self, conversation_id: str) -> list[dict[str, str]]:
         if not self.db or not self.user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -392,8 +392,8 @@ class LLMService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create/update conversation: {str(e)}",
             )
-        
-    async def parse_product_query(self, user_message: str) -> Dict[str, Any]:
+
+    async def parse_product_query(self, user_message: str) -> dict[str, Any]:
         """
         Use LLM to parse Vietnamese user queries and convert them into search parameters
         that can be used with SearchUtils
@@ -455,7 +455,7 @@ class LLMService:
 
         try:
             response = self.query(messages)
-            
+
             if not response or not response.strip():
                 return {
                     "status": "error",
@@ -472,18 +472,18 @@ class LLMService:
                 if cleaned_response.endswith("```"):
                     cleaned_response = cleaned_response[:-3]
                 cleaned_response = cleaned_response.strip()
-                
+
                 parsed_result = json.loads(cleaned_response)
-                
+
                 if not isinstance(parsed_result, dict):
                     raise ValueError("Invalid response format")
 
                 # Extract search parameters
                 search_params = parsed_result.get("search_parameters", {})
-                
+
                 # Transform the parameters if needed to match SearchUtils expectations
                 transformed_params = search_params.copy()
-                
+
                 # Special handling for specifications
                 if "specifications" in transformed_params:
                     specs = transformed_params["specifications"]

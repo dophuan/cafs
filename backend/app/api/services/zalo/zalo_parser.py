@@ -1,9 +1,9 @@
-from typing import Dict, Any, Tuple
-from app.models.zalo import ZaloConversationCreate
+from typing import Any
+
 
 class ZaloParser:
     @staticmethod
-    def parse_message(payload: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    def parse_message(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         event_type = payload.get("event_name", "unknown")
         parsed_data = {
             "conversation_id": payload.get("message", {}).get("msg_id", ""),

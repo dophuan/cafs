@@ -1,20 +1,23 @@
 import logging
-from typing import Dict, Any, List, Union
-from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
-from app.api.services.conversation.chat import LLMService
-from app.models.search_params import SearchParams
+from typing import Any
+
 from sqlmodel import Session, select
-from app.core.config import settings
-from app.models.item import Item
+
 from app.api.constants.actions import (
+    ADD_NEW_ITEMS,
     CHECK_STOCK_LEVELS,
     CREATE_RECEIPT,
-    UPDATE_STOCK_QUANTITIES,
-    ADD_NEW_ITEMS, 
-    UPDATE_ITEM,
+    NORMAL_CONVERSATION,
     SEARCH_PRODUCTS,
-    NORMAL_CONVERSATION
+    UPDATE_ITEM,
+    UPDATE_STOCK_QUANTITIES,
 )
+from app.api.services.conversation.chat import LLMService
+from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
+from app.core.config import settings
+from app.models.item import Item
+from app.models.search_params import SearchParams
+
 logger = logging.getLogger(__name__)
 
 class InventoryService:
@@ -23,9 +26,9 @@ class InventoryService:
         self.es_service = ElasticSearchService()
 
     async def handle_inventory_action(
-        self, 
-        intent: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self,
+        intent: dict[str, Any]
+    ) -> dict[str, Any]:
         handlers = {
             CHECK_STOCK_LEVELS: self.check_stock,
             CREATE_RECEIPT: self.create_receipt,
@@ -35,20 +38,20 @@ class InventoryService:
             SEARCH_PRODUCTS: self.search_product,
             NORMAL_CONVERSATION: self.normal_conversation
         }
-        
+
         handler = handlers.get(intent.get("intent"))
         if not handler:
             return {"message": "No inventory action required"}
-            
+
         return await handler(intent.get("parameters", {}))
 
-    def _normalize_identifier(self, identifier: Union[str, List[str]]) -> Union[str, List[str]]:
+    def _normalize_identifier(self, identifier: str | list[str]) -> str | list[str]:
         """Normalize SKU or barcode to a consistent format"""
         if isinstance(identifier, list):
             return [str(id).strip().upper() for id in identifier]
         return str(identifier).strip().upper()
 
-    def _build_stock_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_stock_query(self, params: dict[str, Any]) -> dict[str, Any]:
         """Build Elasticsearch query based on parameters"""
         query_types = {
             "skus": lambda skus: {
@@ -89,7 +92,7 @@ class InventoryService:
 
         # Get the first available query parameter and its value
         query_param = next((k for k in query_types.keys() if params.get(k)), None)
-        
+
         # Use the matching query builder or default to low stock query
         query_builder = query_types.get(query_param, lambda _: {
             "range": {
@@ -104,7 +107,7 @@ class InventoryService:
             "size": 100
         }
 
-    def _format_stock_items(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _format_stock_items(self, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Format Elasticsearch hits into stock items"""
         formatted_items = []
         for hit in hits:
@@ -128,9 +131,9 @@ class InventoryService:
             })
         return formatted_items
 
-    def _build_stock_message(self, items: List[Dict[str, Any]]) -> str:
+    def _build_stock_message(self, items: list[dict[str, Any]]) -> str:
         """Build response message from formatted items"""
-        message = f"Thông tin tồn kho:\n\n"
+        message = "Thông tin tồn kho:\n\n"
         for item in items:
             message += f"- {item['title']}:\n"
             message += f"  Số lượng: {item['quantity']}\n"
@@ -139,12 +142,12 @@ class InventoryService:
             message += f"  SKU: {item['sku']}\n"
         return message
 
-    async def check_stock(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def check_stock(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Checking stock with params: {params}")
         try:
             query = self._build_stock_query(params)
             logger.info(f"Executing query: {query}")
-            
+
             response = self.es_service.client.search(
                 index=self.es_service.index_name,
                 body=query
@@ -153,7 +156,7 @@ class InventoryService:
 
             hits = response.get('hits', {}).get('hits', [])
             logger.info(f"Found {len(hits)} hits")
-            
+
             if not hits:
                 return {
                     "action": "check_stock",
@@ -180,7 +183,7 @@ class InventoryService:
                 "message": f"Lỗi kiểm tra tồn kho: {str(e)}"
             }
 
-    async def search_product(self, intent_params: Dict[str, Any]) -> Dict[str, Any]:
+    async def search_product(self, intent_params: dict[str, Any]) -> dict[str, Any]:
         """
         Search products using Elasticsearch based on intent parameters
         """
@@ -191,10 +194,10 @@ class InventoryService:
                 api_key=settings.OPENAI_API_KEY,
                 engine=settings.OPENAI_ENGINE
             )
-            
+
             # Parse the natural language query using LLM
             parsed_params = await llm_service.parse_product_query(query)
-            
+
             if parsed_params.get("status") == "error":
                 return {
                     "action": "search_product",
@@ -209,7 +212,7 @@ class InventoryService:
 
             # Perform search using Elasticsearch
             search_result = await self.es_service.search_products(search_params)
-            
+
             if not search_result.results:
                 return {
                     "action": "search_product",
@@ -217,7 +220,7 @@ class InventoryService:
                     "message": "Không tìm thấy sản phẩm nào phù hợp với yêu cầu của bạn",
                     "items": []
                 }
-            
+
             # Format the results
             formatted_items = []
             for item in search_result.results:
@@ -251,7 +254,7 @@ class InventoryService:
                 "page": search_result.page,
                 "size": search_result.size
             }
-                
+
         except Exception as e:
             return {
                 "action": "search_product",
@@ -259,18 +262,18 @@ class InventoryService:
                 "message": f"Lỗi tìm kiếm sản phẩm: {str(e)}"
             }
 
-    async def sync_products_to_elasticsearch(self) -> Dict[str, Any]:
+    async def sync_products_to_elasticsearch(self) -> dict[str, Any]:
         """
         Sync all products from database to Elasticsearch
         """
         try:
             # Add debug logging for query
             statement = select(Item)
-            
+
             # Get items and log raw results
             items = self.db.exec(statement).all()
             logger.info(f"Found {len(items)} items in database")
-            
+
             if not items:
                 logger.error("No items found in database!")
                 # Let's check if the table exists and has the right schema
@@ -317,21 +320,21 @@ class InventoryService:
 
             # Setup Elasticsearch index
             await self.es_service.setup_index()
-            
+
             # Index products
             result = await self.es_service.index_products(products)
-            
+
             # Verify indexing
             count = self.es_service.client.count(index=self.es_service.index_name)
             logger.info(f"After indexing: {count['count']} documents in index")
-            
+
             return {
                 "status": "success",
                 "message": f"Synced {result['indexed']} products to Elasticsearch",
                 "failed": result['failed'],
                 "total_in_index": count['count']
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to sync products: {str(e)}", exc_info=True)
             return {
@@ -339,7 +342,7 @@ class InventoryService:
                 "message": f"Failed to sync products: {str(e)}"
             }
 
-    async def create_receipt(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def create_receipt(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Creating receipt with parameters: {params}")
         return {
             "action": "create_receipt",
@@ -347,7 +350,7 @@ class InventoryService:
             "params": params
         }
 
-    async def update_stock(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_stock(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Updating stock with parameters: {params}")
         return {
             "action": "update_stock",
@@ -355,7 +358,7 @@ class InventoryService:
             "params": params
         }
 
-    async def add_item(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def add_item(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Adding new item with parameters: {params}")
         return {
             "action": "add_item",
@@ -363,15 +366,15 @@ class InventoryService:
             "params": params
         }
 
-    async def update_item(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_item(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Updating item with parameters: {params}")
         return {
             "action": "update_item",
             "status": "success",
             "params": params
         }
-    
-    async def normal_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def normal_conversation(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Payload {params}")
         return {
             "action": "normal_conversation",

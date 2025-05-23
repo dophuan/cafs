@@ -1,9 +1,13 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends
-from typing import Dict, Any
-from pydantic import BaseModel
 
 from app.api.services.zalo.zalo_interaction import ZaloInteractionService
-from app.models.message import ConversationRequest, ConversationWithInventoryRequest, GroupMessageRequest
+from app.models.message import (
+    ConversationRequest,
+    ConversationWithInventoryRequest,
+    GroupMessageRequest,
+)
 
 router = APIRouter(prefix="/zalo", tags=["zalo"])
 
@@ -11,7 +15,7 @@ router = APIRouter(prefix="/zalo", tags=["zalo"])
 def get_zalo_service():
     return ZaloInteractionService()
 
-@router.post("/group/message", response_model=Dict[str, Any])
+@router.post("/group/message", response_model=dict[str, Any])
 async def send_group_message(
     request: GroupMessageRequest,
     service: ZaloInteractionService = Depends(get_zalo_service)
@@ -24,7 +28,7 @@ async def send_group_message(
         text=request.text
     )
 
-@router.post("/conversation/normal", response_model=Dict[str, Any])
+@router.post("/conversation/normal", response_model=dict[str, Any])
 async def handle_normal_conversation(
     conversation: ConversationRequest,
     service: ZaloInteractionService = Depends(get_zalo_service)
@@ -38,7 +42,7 @@ async def handle_normal_conversation(
     }
     return await service.handle_normal_conversation(conversation_result)
 
-@router.post("/conversation/inventory", response_model=Dict[str, Any])
+@router.post("/conversation/inventory", response_model=dict[str, Any])
 async def handle_inventory_conversation(
     request: ConversationWithInventoryRequest,
     service: ZaloInteractionService = Depends(get_zalo_service)
@@ -50,12 +54,12 @@ async def handle_inventory_conversation(
         "group_id": request.conversation.group_id,
         "response_text": request.conversation.response_text
     }
-    
+
     inventory_action = {
         "message": request.inventory_action.message,
         "action": request.inventory_action.action
     }
-    
+
     return await service.handle_inventory_response(
         conversation_result=conversation_result,
         inventory_action=inventory_action

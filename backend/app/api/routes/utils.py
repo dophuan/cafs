@@ -1,17 +1,15 @@
 import logging
+
 from fastapi import APIRouter, Depends
 from pydantic.networks import EmailStr
 from pytest import Session
-from sqlalchemy import text
 from sqlmodel import select
-from app.models.item import Item as DatabaseItem
 
 from app.api.deps import get_current_active_superuser, get_db
+from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
+from app.models.item import Item as DatabaseItem
 from app.models.message import Message
 from app.utils import generate_test_email, send_email
-from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
-from app.api.services.webhook.inventory import InventoryService
-from app.core.config import settings
 
 router = APIRouter(prefix="/utils", tags=["utils"])
 
@@ -53,17 +51,17 @@ async def reindex_products(db: Session = Depends(get_db)):
         'database': engine.url.database
     }
     logger.info(f"Full database URL: {url_dict}")
-    
+
     statement = select(DatabaseItem)
     items = db.exec(statement).all()
-    
+
     if not items:
         return {"status": "error", "message": "No items found in database"}
-        
+
     es_service = ElasticSearchService()
     await es_service.setup_index()
     result = await es_service.index_products([item.dict() for item in items])
-    
+
     return {
         "status": "success",
         "indexed": len(items),

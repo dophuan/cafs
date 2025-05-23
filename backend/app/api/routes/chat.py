@@ -1,8 +1,10 @@
 from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query, status
+
 from app.api.deps import CurrentUser, SessionDep
-from app.utils import get_llm_service
 from app.models.message import ChatRequest, ChatResponse
+from app.utils import get_llm_service
 
 router = APIRouter()
 
@@ -45,7 +47,7 @@ async def chat_endpoint(
     except Exception as e:
         print(f"Error in chat_endpoint: {str(e)}")  # Add this debug line
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
 

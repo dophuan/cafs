@@ -1,14 +1,15 @@
 import logging
+
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
-from app.api.main import api_router
-from app.core.config import settings
 from app.api.deps import get_db
+from app.api.main import api_router
 from app.api.services.webhook.inventory import InventoryService
+from app.core.config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -63,7 +64,7 @@ if settings.all_cors_origins:
 
 # Exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(_: Request, exc: Exception):
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return {"detail": str(exc)}
 
@@ -73,7 +74,7 @@ async def startup_event():
     logger.info(f"Starting {settings.PROJECT_NAME} API")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"API Version: {settings.API_V1_STR}")
-    
+
     # Initialize Elasticsearch sync
     try:
         db = next(get_db())

@@ -1,10 +1,10 @@
-from uuid import UUID, uuid4
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Dict, List
+from typing import TYPE_CHECKING, Optional
+from uuid import UUID, uuid4
 
-from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
-from sqlalchemy import Integer, String, Numeric, text
+from sqlalchemy import Integer, Numeric, String, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .user import User
@@ -16,10 +16,10 @@ class ItemBase(SQLModel):
     category: str | None = Field(default=None, max_length=100, index=True)
     price: float | None = Field(default=None, sa_column=Column(Numeric(10, 2)))
     quantity: int | None = Field(default=0)
-    dimensions: Dict | None = Field(default=None, sa_column=Column(JSONB))
+    dimensions: dict | None = Field(default=None, sa_column=Column(JSONB))
     color_code: str | None = Field(default=None, max_length=50, index=True)
-    specifications: Dict | None = Field(default=None, sa_column=Column(JSONB))
-    tags: List[str] | None = Field(default=None, sa_column=Column(ARRAY(String)))
+    specifications: dict | None = Field(default=None, sa_column=Column(JSONB))
+    tags: list[str] | None = Field(default=None, sa_column=Column(ARRAY(String)))
     status: str = Field(default="active", max_length=20)  # active, discontinued, out_of_stock
     unit: str | None = Field(default=None, max_length=20)  # pcs, kg, m, etc.
     barcode: str | None = Field(default=None, max_length=100)
@@ -37,10 +37,10 @@ class ItemUpdate(SQLModel):
     category: str | None = Field(default=None, max_length=100)
     price: float | None = None
     quantity: int | None = None
-    dimensions: Dict | None = None
+    dimensions: dict | None = None
     color_code: str | None = Field(default=None, max_length=50)
-    specifications: Dict | None = None
-    tags: List[str] | None = None
+    specifications: dict | None = None
+    tags: list[str] | None = None
     status: str | None = Field(default=None, max_length=20)
     unit: str | None = Field(default=None, max_length=20)
     barcode: str | None = Field(default=None, max_length=100)
@@ -49,9 +49,6 @@ class ItemUpdate(SQLModel):
     max_stock: int | None = None
 
 class Item(SQLModel, table=True):
-    class Config:
-        arbitrary_types_allowed = True
-    
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     owner_id: UUID = Field(foreign_key="user.id", nullable=False)
     title: str
@@ -60,10 +57,10 @@ class Item(SQLModel, table=True):
     category: str | None = Field(default=None, sa_column=Column(String(100), index=True))
     price: float | None = Field(default=None, sa_column=Column(Numeric(10, 2)))
     quantity: int | None = Field(default=None, sa_column=Column(Integer))
-    dimensions: Dict | None = Field(default=None, sa_column=Column(JSONB))
+    dimensions: dict | None = Field(default=None, sa_column=Column(JSONB))
     color_code: str | None = Field(default=None, sa_column=Column(String(50), index=True))
-    specifications: Dict | None = Field(default=None, sa_column=Column(JSONB))
-    tags: List[str] | None = Field(default=None, sa_column=Column(ARRAY(String)))
+    specifications: dict | None = Field(default=None, sa_column=Column(JSONB))
+    tags: list[str] | None = Field(default=None, sa_column=Column(ARRAY(String)))
     status: str = Field(default="active", sa_column=Column(String(20), index=True))
     unit: str | None = Field(default=None, sa_column=Column(String(20)))
     barcode: str | None = Field(default=None, sa_column=Column(String(100)))
@@ -75,6 +72,7 @@ class Item(SQLModel, table=True):
     owner: Optional["User"] = Relationship(back_populates="items")
 
     class Config:
+        arbitrary_types_allowed = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
@@ -105,10 +103,10 @@ class ItemSearch(SQLModel):
     color_code: str | None = None
     price_min: float | None = None
     price_max: float | None = None
-    tags: List[str] | None = None
+    tags: list[str] | None = None
     status: str | None = None
-    dimensions: Dict | None = None
-    specifications: Dict | None = None
+    dimensions: dict | None = None
+    specifications: dict | None = None
 
 class ItemStockAdjustment(SQLModel):
     id: UUID
@@ -124,7 +122,7 @@ class ItemSupplierInfo(SQLModel):
     supplier_price: float | None = None
     lead_time_days: int | None = None
     minimum_order_quantity: int | None = None
-    
+
 class ItemWithInventoryStatus(ItemPublic):
     stock_status: str  # in_stock, low_stock, out_of_stock
     days_until_reorder: int | None = None

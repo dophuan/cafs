@@ -1,9 +1,11 @@
-from typing import Dict, Any, List
+from typing import Any
+
 from app.models.search_params import SearchParams
+
 
 class QueryBuilder:
     @staticmethod
-    def build_search_query(params: SearchParams) -> Dict[str, Any]:
+    def build_search_query(params: SearchParams) -> dict[str, Any]:
         must_conditions = []
         should_conditions = []
         filter_conditions = []

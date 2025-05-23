@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     # Elasticsearch configurations
     ELASTICSEARCH_HOST: str | None = None
     ELASTICSEARCH_INDEX: str | None = None
-    
+
     # Cloud configurations
     ELASTICSEARCH_CLOUD_ID: str | None = None
     ELASTICSEARCH_API_KEY: str | None = None
