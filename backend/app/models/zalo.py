@@ -1,37 +1,41 @@
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
 
 from sqlalchemy import Column, DateTime, func
-from sqlmodel import SQLModel, Field
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Field, SQLModel
+
 
 class ZaloConversationBase(SQLModel):
     conversation_id: str
-    group_id: Optional[str] = None
+    group_id: str | None = None
     sender_id: str
     event_type: str
-    message_text: Optional[str] = None
-    file_url: Optional[str] = None
-    file_name: Optional[str] = None
-    file_type: Optional[str] = None
-    sticker_id: Optional[str] = None
-    sticker_url: Optional[str] = None
-    image_url: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    llm_analysis: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    raw_payload: Dict[str, Any] = Field(sa_column=Column(JSONB))
+    message_text: str | None = None
+    file_url: str | None = None
+    file_name: str | None = None
+    file_type: str | None = None
+    sticker_id: str | None = None
+    sticker_url: str | None = None
+    image_url: str | None = None
+    thumbnail_url: str | None = None
+    llm_analysis: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    raw_payload: dict[str, Any] = Field(sa_column=Column(JSONB))
+
 
 class ZaloConversation(ZaloConversationBase, table=True):
     __tablename__ = "zalo_conversations"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
+
+    id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
     )
+
 
 class ZaloConversationCreate(ZaloConversationBase):
     pass
+
 
 class ZaloConversationRead(ZaloConversationBase):
     id: int

@@ -1,20 +1,21 @@
 # app/models/search_params.py
-from typing import Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
+
 
 @dataclass
 class SearchParams:
-    query: Optional[str] = None
-    category: Optional[str] = None
-    color: Optional[str] = None
-    price_range: Optional[Dict[str, float]] = None
-    specifications: Optional[Dict[str, Any]] = None
-    status: Optional[str] = None
+    query: str | None = None
+    category: str | None = None
+    color: str | None = None
+    price_range: dict[str, float] | None = None
+    specifications: dict[str, Any] | None = None
+    status: str | None = None
     page: int = 1
     size: int = 10
 
     @classmethod
-    def from_parsed_params(cls, parsed_params: Dict[str, Any]) -> "SearchParams":
+    def from_parsed_params(cls, parsed_params: dict[str, Any]) -> "SearchParams":
         """Create SearchParams from parsed LLM parameters"""
         # Extract price range
         price_range = {}
@@ -34,12 +35,13 @@ class SearchParams:
             color=parsed_params.get("color_code"),
             price_range=price_range if price_range else None,
             specifications=parsed_params.get("specifications"),
-            status=parsed_params.get("status")
+            status=parsed_params.get("status"),
         )
+
 
 @dataclass
 class SearchResult:
     total: int
     page: int
     size: int
-    results: list[Dict[str, Any]]
+    results: list[dict[str, Any]]

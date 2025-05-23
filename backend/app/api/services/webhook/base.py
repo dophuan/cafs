@@ -1,11 +1,12 @@
-from typing import Dict, Any
-import hmac
 import hashlib
+import hmac
+
 from fastapi import HTTPException
 from sqlmodel import Session
 
 from app.core.config import settings
 from app.models.webhook import Webhook, WebhookCreate
+
 
 class BaseWebhookService:
     def __init__(self, db: Session):
@@ -14,13 +15,11 @@ class BaseWebhookService:
     def verify_signature(self, payload: bytes, signature: str) -> bool:
         if not settings.WEBHOOK_SECRET_KEY:
             return True
-        
+
         expected_signature = hmac.new(
-            settings.WEBHOOK_SECRET_KEY.encode(),
-            payload,
-            hashlib.sha256
+            settings.WEBHOOK_SECRET_KEY.encode(), payload, hashlib.sha256
         ).hexdigest()
-        
+
         return expected_signature == signature
 
     def store_webhook(self, webhook_data: WebhookCreate) -> Webhook:
@@ -32,7 +31,4 @@ class BaseWebhookService:
             return db_webhook
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Database error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

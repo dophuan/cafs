@@ -2,10 +2,11 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Union, List, Dict
+from typing import Any
 
 import requests
 from fastapi import HTTPException, status
+from openai import OpenAI
 from sqlalchemy import (
     Column,
     MetaData,
@@ -17,12 +18,12 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Session
 from sqlmodel import select as sqlmodel_select
-from openai import OpenAI
 
 from app.models.message import LLMConversation, MessageContent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class LLMService:
     def __init__(
@@ -39,13 +40,15 @@ class LLMService:
         self.engine = engine
         self.local_endpoint = local_endpoint
 
-    def query(self, prompt: Union[str, List[MessageContent]]) -> str:
-        try:            
+    def query(self, prompt: str | list[MessageContent]) -> str:
+        try:
             messages = []
             if isinstance(prompt, str):
                 messages = [{"role": "user", "content": prompt}]
             else:
-                messages = [{"role": msg.role, "content": msg.content} for msg in prompt]
+                messages = [
+                    {"role": msg.role, "content": msg.content} for msg in prompt
+                ]
 
             # First try OpenAI if API key is available
             if self.api_key:
@@ -55,7 +58,7 @@ class LLMService:
                         model=self.engine or "gpt-3.5-turbo",
                         messages=messages,
                         temperature=0.7,
-                        max_tokens=2000
+                        max_tokens=2000,
                     )
                     return response.choices[0].message.content.strip()
                 except Exception as e:
@@ -66,42 +69,42 @@ class LLMService:
 
             # Fall back to local endpoint if OpenAI is not configured or failed
             if self.local_endpoint:
-                headers = {
-                    "Content-Type": "application/json"
-                }
-                
+                headers = {"Content-Type": "application/json"}
+
                 payload = {
                     "model": "mistral-7b-instruct-v0.2",
                     "messages": messages,
                     "temperature": 0.7,
                     "max_tokens": 2000,
-                    "stream": False
+                    "stream": False,
                 }
 
                 response = requests.post(
                     f"{self.local_endpoint}/v1/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=30
+                    timeout=30,
                 )
-                
+
                 response.raise_for_status()
                 json_response = response.json()
-                
+
                 if "choices" in json_response and len(json_response["choices"]) > 0:
-                    return str(json_response["choices"][0]["message"]["content"]).strip()
+                    return str(
+                        json_response["choices"][0]["message"]["content"]
+                    ).strip()
                 return ""
 
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No LLM service available"
+                detail="No LLM service available",
             )
-                    
+
         except requests.RequestException as e:
             logger.info(f"Error connecting to LLM: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Chat API request failed: {str(e)}"
+                detail=f"Chat API request failed: {str(e)}",
             )
 
     def list_conversations(
@@ -125,8 +128,10 @@ class LLMService:
                 else self.user_id
             )
 
-            count_query = sqlmodel_select(func.count()).select_from(LLMConversation).where(
-                LLMConversation.user_id == user_id_param
+            count_query = (
+                sqlmodel_select(func.count())
+                .select_from(LLMConversation)
+                .where(LLMConversation.user_id == user_id_param)
             )
 
             total_count = self.db.execute(count_query).scalar() or 0
@@ -234,7 +239,7 @@ class LLMService:
                 detail=f"Failed to delete conversation: {str(e)}",
             )
 
-    def get_chat_history(self, conversation_id: str) -> List[Dict[str, str]]:
+    def get_chat_history(self, conversation_id: str) -> list[dict[str, str]]:
         if not self.db or not self.user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -392,8 +397,8 @@ class LLMService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to create/update conversation: {str(e)}",
             )
-        
-    async def parse_product_query(self, user_message: str) -> Dict[str, Any]:
+
+    async def parse_product_query(self, user_message: str) -> dict[str, Any]:
         """
         Use LLM to parse Vietnamese user queries and convert them into search parameters
         that can be used with SearchUtils
@@ -450,17 +455,17 @@ class LLMService:
 
         messages = [
             MessageContent(role="assistant", content=system_prompt),
-            MessageContent(role="user", content=user_prompt)
+            MessageContent(role="user", content=user_prompt),
         ]
 
         try:
             response = self.query(messages)
-            
+
             if not response or not response.strip():
                 return {
                     "status": "error",
                     "message": "Empty response from LLM",
-                    "parameters": {"title": user_message}
+                    "parameters": {"title": user_message},
                 }
 
             try:
@@ -472,18 +477,18 @@ class LLMService:
                 if cleaned_response.endswith("```"):
                     cleaned_response = cleaned_response[:-3]
                 cleaned_response = cleaned_response.strip()
-                
+
                 parsed_result = json.loads(cleaned_response)
-                
+
                 if not isinstance(parsed_result, dict):
                     raise ValueError("Invalid response format")
 
                 # Extract search parameters
                 search_params = parsed_result.get("search_parameters", {})
-                
+
                 # Transform the parameters if needed to match SearchUtils expectations
                 transformed_params = search_params.copy()
-                
+
                 # Special handling for specifications
                 if "specifications" in transformed_params:
                     specs = transformed_params["specifications"]
@@ -502,25 +507,25 @@ class LLMService:
                         # Convert simple price to exact match format
                         transformed_params["price"] = {
                             "operator": "=",
-                            "value": float(price_param)
+                            "value": float(price_param),
                         }
 
                 return {
                     "status": "success",
                     "parameters": transformed_params,
-                    "sort": parsed_result.get("sort_parameters")
+                    "sort": parsed_result.get("sort_parameters"),
                 }
 
             except json.JSONDecodeError as e:
                 return {
                     "status": "error",
                     "message": f"Failed to parse LLM response as JSON: {str(e)}",
-                    "parameters": {"title": user_message}
+                    "parameters": {"title": user_message},
                 }
 
         except Exception as e:
             return {
                 "status": "error",
                 "message": f"Error parsing product query: {str(e)}",
-                "parameters": {"title": user_message}
+                "parameters": {"title": user_message},
             }
