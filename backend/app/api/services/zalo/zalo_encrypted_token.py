@@ -17,6 +17,7 @@ class EncryptedFileTokenStorage:
 
             self.cipher_suite = Fernet(self.key)
             self.file_path = "secure_tokens.enc"
+            print(f"==== Received encryption key {self.key}")
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

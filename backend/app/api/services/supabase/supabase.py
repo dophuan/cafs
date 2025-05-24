@@ -1,7 +1,7 @@
 import logging
 from typing import Any, List
 
-import openai
+from openai import OpenAI
 from supabase import create_client, Client
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -16,6 +16,7 @@ class SupabaseService:
     def __init__(self):
         self.client = self._get_client()
         self.table_name = settings.SUPABASE_TABLE or "item"
+        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
         logger.info(f"Service initialized with table: {self.table_name}")
 
     def _get_client(self) -> Any:
@@ -99,7 +100,7 @@ class SupabaseService:
                 max_stock INT,
                 created_at TIMESTAMPTZ DEFAULT now(),
                 updated_at TIMESTAMPTZ DEFAULT now(),
-                embeddings VECTOR(1536),
+                embedding VECTOR(1536),
                 unit VARCHAR(20),
                 barcode VARCHAR(100),
                 supplier_id VARCHAR(100)
@@ -108,19 +109,6 @@ class SupabaseService:
             logger.info("Table 'item' is ready.")
         except Exception as e:
             logger.error(f"Failed to setup tables: {str(e)}", exc_info=True)
-            raise
-
-    async def get_embeddings(self, text: str) -> List[float]:
-        """Generate embeddings for a given text using OpenAI."""
-        try:
-            openai.api_key = settings.OPENAI_API_KEY
-            response = openai.Embedding.create(
-                input=text,
-                model="text-embedding-ada-002"  # Suitable for most vector use cases
-            )
-            return response["data"][0]["embedding"]
-        except Exception as e:
-            logger.error(f"Error generating embeddings: {str(e)}", exc_info=True)
             raise
 
     async def index_products(self, products: List[dict[str, Any]]) -> dict[str, int]:
@@ -138,9 +126,8 @@ class SupabaseService:
             for product in products:
                 try:
                     # Generate embeddings for the product title and description
-                    embedding = await self.get_embeddings(
-                        f"{product.get('title', '')} {product.get('description', '')}"
-                    )
+                    text = f"{product.get('title', '')} {product.get('description', '')}"
+                    embedding = await self.get_embeddings(text)
 
                     if settings.ENVIRONMENT == "local":
                         # Insert product into local PostgreSQL
@@ -148,8 +135,11 @@ class SupabaseService:
                         INSERT INTO {self.table_name} (
                             title, description, category, color_code, price,
                             specifications, tags, status, sku, quantity, embedding
-                        ) VALUES (:title, :description, :category, :color_code, :price,
-                                  :specifications, :tags, :status, :sku, :quantity, :embedding)
+                        ) VALUES (
+                            :title, :description, :category, :color_code, :price,
+                            :specifications, :tags, :status, :sku, :quantity, 
+                            :embedding::vector(1536)
+                        )
                         """
                         params = {
                             "title": product.get("title", ""),
@@ -165,57 +155,143 @@ class SupabaseService:
                             "embedding": embedding,
                         }
                         self._execute_query(query, params)
+                        indexed += 1
                     else:
                         # Insert product into Supabase
-                        response = self.client.table(self.table_name).insert({
-                            "title": product.get("title", ""),
-                            "description": product.get("description", ""),
-                            "category": product.get("category", ""),
-                            "color_code": product.get("color_code", ""),
-                            "price": float(product.get("price", 0)),
-                            "specifications": product.get("specifications", {}),
-                            "tags": product.get("tags", []),
-                            "status": product.get("status", ""),
-                            "sku": product.get("sku", ""),
-                            "quantity": int(product.get("quantity", 0)),
-                            "embedding": embedding
-                        }).execute()
-
-                        if response.status_code != 201:
-                            logger.error(f"Failed to index product: {response.json()}")
+                        try:
+                            data = {
+                                "title": product.get("title", ""),
+                                "description": product.get("description", ""),
+                                "category": product.get("category", ""),
+                                "color_code": product.get("color_code", ""),
+                                "price": float(product.get("price", 0)),
+                                "specifications": product.get("specifications", {}),
+                                "tags": product.get("tags", []),
+                                "status": product.get("status", ""),
+                                "sku": product.get("sku", ""),
+                                "quantity": int(product.get("quantity", 0)),
+                                "embedding": embedding
+                            }
+                            
+                            response = self.client.table(self.table_name).insert(data).execute()
+                            
+                            if hasattr(response, 'data'):
+                                if response.data:
+                                    indexed += 1
+                                else:
+                                    logger.error(f"Failed to index product into Supabase: {product.get('title')} - No data returned")
+                                    failed += 1
+                            else:
+                                logger.error(f"Failed to index product into Supabase: {product.get('title')} - Invalid response")
+                                failed += 1
+                                
+                        except Exception as supabase_error:
+                            logger.error(f"Supabase insertion error for product {product.get('title')}: {str(supabase_error)}")
                             failed += 1
-                            continue
 
-                    indexed += 1
-                except Exception as e:
-                    logger.error(f"Error indexing product: {str(e)}", exc_info=True)
+                except Exception as product_error:
+                    logger.error(f"Error processing product {product.get('title')}: {str(product_error)}")
                     failed += 1
 
             logger.info(f"Indexing complete: {indexed} succeeded, {failed} failed.")
             return {"indexed": indexed, "failed": failed}
+            
         except Exception as e:
-            logger.error(f"Indexing error: {str(e)}", exc_info=True)
+            logger.error(f"Critical indexing error: {str(e)}", exc_info=True)
             return {"indexed": 0, "failed": len(products) if products else 0}
+
+    async def get_embeddings(self, text: str) -> List[float]:
+        """Generate embeddings for a given text using OpenAI."""
+        try:
+            if not text:
+                logger.warning("Empty text provided for embeddings")
+                return []
+                
+            logger.info(f"Generating embeddings for text: {text[:100]}...")
+            
+            response = self.openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=text
+            )
+            
+            if not response.data:
+                logger.warning("No embeddings returned from API")
+                return []
+                
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Error generating embeddings: {str(e)}", exc_info=True)
+            raise
 
     async def search_products(self, search_params: SearchParams) -> SearchResult:
         """Search products based on search parameters."""
         try:
-            embedding = await self.get_embeddings(search_params.query)
-            query = f"""
-            SELECT *, (embedding <=> :embedding) AS distance
-            FROM {self.table_name}
-            WHERE (embedding <=> :embedding) <= :threshold
-            ORDER BY distance
-            LIMIT :limit OFFSET :offset
-            """
-            params = {
-                "embedding": embedding,
-                "threshold": search_params.match_threshold,
-                "limit": search_params.size,
-                "offset": (search_params.page - 1) * search_params.size,
-            }
-            results = self._execute_query(query, params)
+            # Construct search text
+            search_parts = []
+            if search_params.query:
+                search_parts.append(search_params.query)
+            if search_params.category:
+                search_parts.append(f"category: {search_params.category}")
+            if search_params.color:
+                search_parts.append(f"color: {search_params.color}")
+            if search_params.specifications:
+                specs_str = " ".join(f"{k}: {v}" for k, v in search_params.specifications.items())
+                search_parts.append(f"specifications: {specs_str}")
+            
+            search_text = " ".join(search_parts)
+            
+            # Get embeddings for search text
+            embedding = await self.get_embeddings(search_text)
+            
+            if not embedding:
+                logger.warning("No embeddings generated for search parameters")
+                return SearchResult(
+                    total=0,
+                    page=search_params.page,
+                    size=search_params.size,
+                    results=[]
+                )
+
+            # Build the query with proper vector handling
+            query = """
+            WITH vector_matches AS (
+                SELECT id, embedding <-> array[{}]::vector(1536) as distance
+                FROM {}
+                WHERE 1=1
+            """.format(
+                ','.join(str(x) for x in embedding),
+                self.table_name
+            )
+
+            # Add filters
+            if search_params.category:
+                query += " AND category = '{}'".format(search_params.category.replace("'", "''"))
+            if search_params.status:
+                query += " AND status = '{}'".format(search_params.status.replace("'", "''"))
+            
+            # Close the CTE and get final results
+            query += """
+            )
+            SELECT i.*, vm.distance
+            FROM {} i
+            INNER JOIN vector_matches vm ON vm.id = i.id
+            WHERE vm.distance <= 0.3
+            ORDER BY vm.distance
+            LIMIT {}
+            OFFSET {}
+            """.format(
+                self.table_name,
+                search_params.size,
+                (search_params.page - 1) * search_params.size
+            )
+
+            logger.info(f"Executing search query: {query}")
+            
+            results = self._execute_query(query)
             total = len(results)
+            
+            logger.info(f"Found {total} results for search query")
+            
             return SearchResult(
                 total=total,
                 page=search_params.page,
@@ -224,4 +300,9 @@ class SupabaseService:
             )
         except Exception as e:
             logger.error(f"Search error: {str(e)}", exc_info=True)
-            return SearchResult(total=0, page=search_params.page, size=search_params.size, results=[])
+            return SearchResult(
+                total=0, 
+                page=search_params.page,
+                size=search_params.size,
+                results=[]
+            )

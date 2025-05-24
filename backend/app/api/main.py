@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import chat, items, login, private, users, utils, webhook, zalo
+from app.api.routes import chat, items, login, private, inventory, users, utils, webhook, zalo
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -11,6 +11,7 @@ api_router.include_router(items.router)
 api_router.include_router(chat.router)
 api_router.include_router(webhook.router)
 api_router.include_router(zalo.router)
+api_router.include_router(inventory.router)
 
 
 if settings.ENVIRONMENT == "local":

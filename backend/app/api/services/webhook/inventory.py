@@ -98,6 +98,9 @@ class InventoryService:
         """
         try:
             query = intent_params.get("query", "")
+
+            logger.info(f"==== Open AI {settings.OPENAI_API_KEY}")
+            logger.info(f"==== Intent query {query}")
             llm_service = LLMService(
                 db=self.db,
                 api_key=settings.OPENAI_API_KEY,
@@ -106,6 +109,7 @@ class InventoryService:
 
             # Parse the natural language query using LLM
             parsed_params = await llm_service.parse_product_query(query)
+            logger.info(f"==== Parsed params { parsed_params }")
 
             if parsed_params.get("status") == "error":
                 return {
@@ -120,6 +124,8 @@ class InventoryService:
 
             # Perform vector search using Supabase
             search_result = await self.supabase_service.search_products(search_params)
+
+            logger.info(f"==== Search result {search_result}")
 
             if not search_result.results:
                 return {

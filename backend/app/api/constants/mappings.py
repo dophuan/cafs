@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS products (
     reorder_point INTEGER,
     sku TEXT UNIQUE,
     barcode TEXT UNIQUE,
-    embedding VECTOR(1536), -- pgvector column for OpenAI embeddings
+    embedding VECTOR(1536), -- pgvector column for OpenAI embedding
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

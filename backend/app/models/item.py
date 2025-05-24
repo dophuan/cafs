@@ -91,7 +91,7 @@ class Item(SQLModel, table=True):
         )
     )
     owner: Optional["User"] = Relationship(back_populates="items")
-    embeddings: list[float] | None = Field(default=None, sa_column=Column(Vector(1536)))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(1536)))
 
     class Config:
         arbitrary_types_allowed = True
