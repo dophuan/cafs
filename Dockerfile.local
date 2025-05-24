@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies including PostgreSQL client
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+# Copy dependency files first
+COPY ./backend/pyproject.toml /app/
+
+# Install dependencies using uv pip
+RUN uv pip install --system . && \
+    uv pip install --system pytest mypy ruff pre-commit types-passlib coverage uvicorn
+
+# Set environment variables
+ENV PORT=8000
+ENV HOST=localhost
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+# We don't copy the app code here because it will be mounted as a volume
+CMD ["uvicorn", "app.main:app", "--port", "8000", "--reload", "--proxy-headers", "--timeout-keep-alive", "75"]

@@ -25,10 +25,13 @@ dependencies = [
     "psycopg2 (>=2.9.10,<3.0.0)",
     "cryptography (>=41.0.7,<42.0.0)",
     "elasticsearch>=8.8.0,<9.0.0",
+    "supabase>=2.0.0",
+    "pgvector==0.4.1",
 ]
 
 [tool.uv]
 dev-dependencies = [
+    "numpy==2.2.6",
     "pytest<8.0.0,>=7.4.3",
     "mypy<2.0.0,>=1.8.0",
     "ruff<1.0.0,>=0.2.2",

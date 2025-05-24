@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
+from app.core.config import settings
 
 from app.core.db import engine
 
@@ -20,6 +21,13 @@ wait_seconds = 1
     after=after_log(logger, logging.WARN),
 )
 def init(db_engine: Engine) -> None:
+    # Print connection details for debugging
+    logger.info(f"Attempting to connect with:")
+    logger.info(f"Server: {settings.POSTGRES_SERVER}")
+    logger.info(f"Port: {settings.POSTGRES_PORT}")
+    logger.info(f"DB: {settings.POSTGRES_DB}")
+    logger.info(f"User: {settings.POSTGRES_USER}")
+    logger.info(f"Full URI: {settings.SQLALCHEMY_DATABASE_URI}")
     try:
         with Session(db_engine) as session:
             # Try to create session to check if DB is awake

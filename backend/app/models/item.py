@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
+from pgvector.sqlalchemy import Vector
 
 if TYPE_CHECKING:
     from .user import User
@@ -55,6 +56,8 @@ class ItemUpdate(SQLModel):
 
 
 class Item(SQLModel, table=True):
+    __tablename__ = "item"
+    __table_args__ = {"schema": "public"}
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     owner_id: UUID = Field(foreign_key="user.id", nullable=False)
     title: str
@@ -88,6 +91,7 @@ class Item(SQLModel, table=True):
         )
     )
     owner: Optional["User"] = Relationship(back_populates="items")
+    embeddings: list[float] | None = Field(default=None, sa_column=Column(Vector(1536)))
 
     class Config:
         arbitrary_types_allowed = True

@@ -13,7 +13,7 @@ from app.api.constants.actions import (
     UPDATE_STOCK_QUANTITIES,
 )
 from app.api.services.conversation.chat import LLMService
-from app.api.services.elasticsearch.elasticsearch import ElasticSearchService
+from app.api.services.supabase.supabase import SupabaseService  # Use SupabaseService
 from app.core.config import settings
 from app.models.item import Item
 from app.models.search_params import SearchParams
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class InventoryService:
     def __init__(self, db: Session):
         self.db = db
-        self.es_service = ElasticSearchService()
+        self.supabase_service = SupabaseService()  # Replace ElasticSearchService with SupabaseService
 
     async def handle_inventory_action(self, intent: dict[str, Any]) -> dict[str, Any]:
         handlers = {
@@ -49,106 +49,32 @@ class InventoryService:
             return [str(id).strip().upper() for id in identifier]
         return str(identifier).strip().upper()
 
-    def _build_stock_query(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Build Elasticsearch query based on parameters"""
-        query_types = {
-            "skus": lambda skus: {
-                "bool": {
-                    "should": [
-                        {"match": {"sku": sku}}
-                        for sku in self._normalize_identifier(skus)
-                    ],
-                    "minimum_should_match": 1,
-                }
-            },
-            "sku": lambda sku: {"match": {"sku": self._normalize_identifier(sku)}},
-            "barcodes": lambda barcodes: {
-                "bool": {
-                    "should": [
-                        {"match": {"barcode": barcode}}
-                        for barcode in self._normalize_identifier(barcodes)
-                    ],
-                    "minimum_should_match": 1,
-                }
-            },
-            "barcode": lambda barcode: {
-                "match": {"barcode": self._normalize_identifier(barcode)}
-            },
-            "product_name": lambda name: {
-                "match": {"title": {"query": name, "analyzer": "vietnamese_analyzer"}}
-            },
-        }
-
-        # Get the first available query parameter and its value
-        query_param = next((k for k in query_types.keys() if params.get(k)), None)
-
-        # Use the matching query builder or default to low stock query
-        query_builder = query_types.get(
-            query_param, lambda _: {"range": {"quantity": {"lte": "reorder_point"}}}
-        )
-
-        return {"query": query_builder(params.get(query_param, [])), "size": 100}
-
-    def _format_stock_items(self, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Format Elasticsearch hits into stock items"""
-        formatted_items = []
-        for hit in hits:
-            source = hit["_source"]
-            quantity = int(source.get("quantity", 0))
-            reorder_point = int(source.get("reorder_point", 0))
-
-            stock_status = "Còn hàng"
-            if quantity == 0:
-                stock_status = "Hết hàng"
-            elif quantity <= reorder_point:
-                stock_status = "Sắp hết hàng"
-
-            formatted_items.append(
-                {
-                    "title": source.get("title", ""),
-                    "quantity": quantity,
-                    "status": stock_status,
-                    "reorder_point": reorder_point,
-                    "price": f"{float(source.get('price', 0)):,.0f} VND",
-                    "sku": source.get("sku", ""),
-                }
-            )
-        return formatted_items
-
-    def _build_stock_message(self, items: list[dict[str, Any]]) -> str:
-        """Build response message from formatted items"""
-        message = "Thông tin tồn kho:\n\n"
-        for item in items:
-            message += f"- {item['title']}:\n"
-            message += f"  Số lượng: {item['quantity']}\n"
-            message += f"  Trạng thái: {item['status']}\n"
-            message += f"  Giá: {item['price']}\n"
-            message += f"  SKU: {item['sku']}\n"
-        return message
-
     async def check_stock(self, params: dict[str, Any]) -> dict[str, Any]:
         logger.info(f"Checking stock with params: {params}")
         try:
-            query = self._build_stock_query(params)
-            logger.info(f"Executing query: {query}")
-
-            response = self.es_service.client.search(
-                index=self.es_service.index_name, body=query
-            )
-            logger.info(f"Search response: {response}")
-
-            hits = response.get("hits", {}).get("hits", [])
-            logger.info(f"Found {len(hits)} hits")
-
-            if not hits:
+            query_param = params.get("sku") or params.get("barcode") or params.get("product_name")
+            if not query_param:
+                return {
+                    "action": "check_stock",
+                    "status": "error",
+                    "message": "No valid query parameter provided for stock check",
+                }
+            
+            # Query Supabase for stock
+            response = self.supabase_service.supabase.table(self.supabase_service.table_name).select(
+                "id, title, quantity, reorder_point, price, sku"
+            ).filter("sku", "eq", self._normalize_identifier(query_param)).execute()
+            
+            if response.status_code != 200 or not response.data:
                 return {
                     "action": "check_stock",
                     "status": "success",
                     "message": "Không tìm thấy sản phẩm nào",
                     "items": [],
                 }
-
-            formatted_items = self._format_stock_items(hits)
+            
+            items = response.data
+            formatted_items = self._format_stock_items(items)
             message = self._build_stock_message(formatted_items)
 
             return {
@@ -168,7 +94,7 @@ class InventoryService:
 
     async def search_product(self, intent_params: dict[str, Any]) -> dict[str, Any]:
         """
-        Search products using Elasticsearch based on intent parameters
+        Search products using Supabase based on intent parameters
         """
         try:
             query = intent_params.get("query", "")
@@ -191,10 +117,9 @@ class InventoryService:
 
             # Convert parsed parameters to SearchParams using the new factory method
             search_params = SearchParams.from_parsed_params(parsed_params["parameters"])
-            print(f"====== Search params: {search_params}")
 
-            # Perform search using Elasticsearch
-            search_result = await self.es_service.search_products(search_params)
+            # Perform vector search using Supabase
+            search_result = await self.supabase_service.search_products(search_params)
 
             if not search_result.results:
                 return {
@@ -241,40 +166,32 @@ class InventoryService:
             }
 
         except Exception as e:
+            logger.error(f"Search error: {str(e)}", exc_info=True)
             return {
                 "action": "search_product",
                 "status": "error",
                 "message": f"Lỗi tìm kiếm sản phẩm: {str(e)}",
             }
 
-    async def sync_products_to_elasticsearch(self) -> dict[str, Any]:
+    async def sync_products_to_supabase(self) -> dict[str, Any]:
         """
-        Sync all products from database to Elasticsearch
+        Sync all products from database to Supabase
         """
         try:
-            # Add debug logging for query
+            # Ensure the table is created before syncing
+            await self.supabase_service.setup_table()
+            # Fetch all items from the database
             statement = select(Item)
-
-            # Get items and log raw results
             items = self.db.exec(statement).all()
-            logger.info(f"Found {len(items)} items in database")
 
             if not items:
-                logger.error("No items found in database!")
-                # Let's check if the table exists and has the right schema
-                try:
-                    # Try to get one item to verify table structure
-                    test_item = self.db.exec(select(Item).limit(1)).first()
-                    logger.info(f"Test query result: {test_item}")
-                except Exception as table_error:
-                    logger.error(f"Table check error: {str(table_error)}")
                 return {"status": "error", "message": "No products found in database"}
+
             # Convert items to dictionary format
             products = []
             for item in items:
                 try:
                     product = {
-                        "id": str(item.id),
                         "title": item.title,
                         "description": item.description,
                         "category": item.category,
@@ -285,11 +202,7 @@ class InventoryService:
                         "status": item.status,
                         "sku": item.sku,
                         "quantity": item.quantity or 0,
-                        "dimensions": item.dimensions or {},
-                        "unit": item.unit,
                         "barcode": item.barcode,
-                        "supplier_id": item.supplier_id,
-                        "owner_id": str(item.owner_id),
                     }
                     products.append(product)
                 except Exception as e:
@@ -298,25 +211,13 @@ class InventoryService:
                     )
                     continue
 
-            logger.info(f"Converting {len(products)} products for indexing")
-            if products:
-                logger.info(f"Sample product for indexing: {products[0]}")
-
-            # Setup Elasticsearch index
-            await self.es_service.setup_index()
-
-            # Index products
-            result = await self.es_service.index_products(products)
-
-            # Verify indexing
-            count = self.es_service.client.count(index=self.es_service.index_name)
-            logger.info(f"After indexing: {count['count']} documents in index")
+            # Index products into Supabase
+            result = await self.supabase_service.index_products(products)
 
             return {
                 "status": "success",
-                "message": f"Synced {result['indexed']} products to Elasticsearch",
+                "message": f"Synced {result['indexed']} products to Supabase",
                 "failed": result["failed"],
-                "total_in_index": count["count"],
             }
 
         except Exception as e:
